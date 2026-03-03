@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Button,
   Keyboard,
@@ -447,7 +453,7 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     alignItems: "center",
-    backgroundColor: "transparent",
+    backgroundColor: "#ffffffa0",
     borderColor: "#ccc",
     borderTopWidth: 1,
     flexDirection: "row",
