@@ -104,10 +104,35 @@ const AIResponse = ({
   );
 };
 
+const LIFT_BEHAVIORS = ["always", "whenAtEnd", "persistent", "never"] as const;
+type LiftBehavior = (typeof LIFT_BEHAVIORS)[number];
+
+const REPLIES = [
+  (msg: string) => `Got it! "${msg}" - let me know if you need more help.`,
+  (msg: string) =>
+    `I understand you said: "${msg}". That's a great point! Here are a few thoughts:\n\n1. First consideration\n2. Second aspect\n\nAnything else? First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.`,
+  (msg: string) =>
+    `I understand you said: "${msg}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know?`,
+  (msg: string) =>
+    `I understand you said: "${msg}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know? I understand you said: "${msg}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know? I understand you said: "${msg}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know?`,
+];
+
+function pickReply(input: string, userMessage: string): string {
+  const letter = input.trim().toLowerCase().charAt(0);
+  const index = letter.charCodeAt(0) - "a".charCodeAt(0);
+
+  if (index >= 0 && index < REPLIES.length) {
+    return REPLIES[index](userMessage);
+  }
+
+  return REPLIES[Math.floor(Math.random() * REPLIES.length)](userMessage);
+}
+
 const AIChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [liftBehavior, setLiftBehavior] = useState<LiftBehavior>("whenAtEnd");
   const [blankSizeIndex, setBlankSizeIndex] = useState<number | undefined>(
     undefined,
   );
@@ -128,7 +153,7 @@ const AIChat = () => {
     activeTimers.current = [];
   }, []);
 
-  const doSendMessage = (text: string) => {
+  const doSendMessage = (text: string, rawInput: string) => {
     setBlankSizeIndex(messages.length);
 
     setMessages((prevMessages) => [
@@ -144,7 +169,7 @@ const AIChat = () => {
 
     schedule(() => {
       listRef.current?.scrollToEnd({ animated: true });
-      schedule(() => simulateAIResponse(text), 800);
+      schedule(() => simulateAIResponse(text, rawInput), 800);
     }, 200);
   };
 
@@ -152,6 +177,7 @@ const AIChat = () => {
     const text = inputText.trim();
     if (!text) return;
 
+    const rawInput = inputText;
     setInputText("");
 
     const isFocused = inputRef.current?.isFocused();
@@ -161,14 +187,14 @@ const AIChat = () => {
 
       const subscription = Keyboard.addListener("keyboardDidHide", () => {
         subscription.remove();
-        doSendMessage(text);
+        doSendMessage(text, rawInput);
       });
     } else {
-      doSendMessage(text);
+      doSendMessage(text, rawInput);
     }
   };
 
-  const simulateAIResponse = (userMessage: string) => {
+  const simulateAIResponse = (userMessage: string, rawInput: string) => {
     const aiMessageId = createId();
 
     setMessages((prevMessages) => [
@@ -183,13 +209,7 @@ const AIChat = () => {
     ]);
 
     schedule(() => {
-      const replies = [
-        `Got it! "${userMessage}" - let me know if you need more help.`,
-        `I understand you said: "${userMessage}". That's a great point! Here are a few thoughts:\n\n1. First consideration\n2. Second aspect\n\nAnything else? First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.`,
-        `I understand you said: "${userMessage}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know?`,
-        `I understand you said: "${userMessage}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know? I understand you said: "${userMessage}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know? I understand you said: "${userMessage}". This is a simulated AI response that demonstrates the streaming text functionality.\n\nLet me provide you with more details:\n\n1. First point about your question - this is important to consider when thinking about the broader context of your inquiry.\n\n2. Second important consideration - there are multiple angles to approach this from, and each has its own merits.\n\n3. Third aspect to keep in mind - don't forget about the practical implications and how they might affect your decision.\n\n4. Fourth element worth exploring - sometimes the less obvious factors turn out to be the most significant.\n\nIn conclusion, I hope this helps clarify things. Is there anything else you'd like to know?`,
-      ];
-      const responseText = replies[Math.floor(Math.random() * replies.length)];
+      const responseText = pickReply(rawInput, userMessage);
 
       setMessages((prevMessages) =>
         prevMessages.map((msg) =>
@@ -265,6 +285,20 @@ This makes it possible to scroll through thousands of items without performance 
 
   return (
     <View style={styles.container}>
+      <View style={styles.behaviorBar}>
+        {LIFT_BEHAVIORS.map((b) => (
+          <Text
+            key={b}
+            onPress={() => setLiftBehavior(b)}
+            style={[
+              styles.behaviorButton,
+              b === liftBehavior && styles.behaviorButtonActive,
+            ]}
+          >
+            {b}
+          </Text>
+        ))}
+      </View>
       <KeyboardGestureArea
         interpolator="ios"
         offset={60}
@@ -278,7 +312,7 @@ This makes it possible to scroll through thousands of items without performance 
           keyExtractor={(_item, index) => `item-${index}`}
           maintainScrollAtEnd={Platform.OS === "web"}
           maintainVisibleContentPosition
-          keyboardLiftBehavior="whenAtEnd"
+          keyboardLiftBehavior={liftBehavior}
           offset={insets.bottom}
           ref={listRef}
           renderItem={({ item }) => (
@@ -336,6 +370,28 @@ This makes it possible to scroll through thousands of items without performance 
 };
 
 const styles = StyleSheet.create({
+  behaviorBar: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#ffffff",
+    zIndex: 1000,
+  },
+  behaviorButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 13,
+    color: "#666",
+    backgroundColor: "#ddd",
+    overflow: "hidden",
+  },
+  behaviorButtonActive: {
+    backgroundColor: "#007AFF",
+    color: "#fff",
+  },
   container: {
     backgroundColor: "#fff",
     flex: 1,
