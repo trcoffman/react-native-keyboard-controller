@@ -41,6 +41,7 @@ export const KeyboardChatLegendList = typedForwardRef(
       blankSizeIndex,
       onItemSizeChanged: onItemSizeChangedProp,
       onMetricsChange: onMetricsChangeProp,
+      extraContentPadding,
       ...rest
     } = props;
 
@@ -102,10 +103,7 @@ export const KeyboardChatLegendList = typedForwardRef(
         itemKey: string;
         itemData: ItemT;
       }) => {
-        if (
-          blankSizeIndex !== undefined &&
-          info.index >= blankSizeIndex
-        ) {
+        if (blankSizeIndex !== undefined && info.index >= blankSizeIndex) {
           calculateTopItemInset();
         }
         onItemSizeChangedProp?.(info);
@@ -123,10 +121,11 @@ export const KeyboardChatLegendList = typedForwardRef(
           <KeyboardChatScrollView
             {...scrollProps}
             blankSize={blankSize}
+            extraContentPadding={extraContentPadding}
           />
         );
       },
-      [blankSize],
+      [blankSize, extraContentPadding],
     );
 
     return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Button,
   Keyboard,
@@ -13,7 +13,7 @@ import {
   KeyboardProvider,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { LegendListRef } from "@legendapp/list";
 
@@ -138,9 +138,25 @@ const AIChat = () => {
   );
   const listRef = useRef<LegendListRef>(null);
   const inputRef = useRef<TextInput>(null);
+  const composerRef = useRef<View>(null);
   const hasInitialized = useRef(false);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const insets = useSafeAreaInsets();
+  const composerHeight = useSharedValue(0);
+
+  useLayoutEffect(() => {
+    const node = composerRef.current;
+    if (node && typeof node.getBoundingClientRect === "function") {
+      composerHeight.value = node.getBoundingClientRect().height;
+    }
+  }, []);
+
+  const onComposerLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      composerHeight.value = event.nativeEvent.layout.height;
+    },
+    [],
+  );
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -310,6 +326,7 @@ This makes it possible to scroll through thousands of items without performance 
           blankSizeIndex={blankSizeIndex}
           contentContainerStyle={styles.contentContainer}
           data={messages}
+          extraContentPadding={composerHeight}
           initialScrollAtEnd
           keyExtractor={(_item, index) => `item-${index}`}
           maintainScrollAtEnd={Platform.OS === "web"}
@@ -350,8 +367,13 @@ This makes it possible to scroll through thousands of items without performance 
           style={styles.list}
         />
       </KeyboardGestureArea>
-      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
+      <KeyboardStickyView
+        offset={{ closed: 0, opened: insets.bottom }}
+        style={styles.composerWrapper}
+      >
         <View
+          onLayout={onComposerLayout}
+          ref={composerRef}
           style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}
         >
           <TextInput
@@ -394,6 +416,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     color: "#fff",
   },
+  composerWrapper: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+  },
   container: {
     backgroundColor: "#fff",
     flex: 1,
@@ -427,7 +455,6 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-    overflow: "visible",
   },
   messageContainer: {
     borderRadius: 16,
