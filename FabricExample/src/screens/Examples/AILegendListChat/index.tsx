@@ -276,7 +276,7 @@ This makes it possible to scroll through thousands of items without performance 
           data={messages}
           initialScrollAtEnd
           keyExtractor={(_item, index) => `item-${index}`}
-          maintainScrollAtEnd={Platform.OS === "web" || isInputFocused}
+          maintainScrollAtEnd={Platform.OS === "web"}
           maintainVisibleContentPosition
           keyboardLiftBehavior="whenAtEnd"
           offset={insets.bottom}
