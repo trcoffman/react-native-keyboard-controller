@@ -148,9 +148,19 @@ function useChatKeyboard(
           } else {
             // Preserve "whenAtEnd" sentinel: if open didn't shift, close shouldn't either
             if (offsetBeforeScroll.value !== -1) {
-              // Non-inverted: subtract padding to get the "natural" position
-              // so onMove smoothly scrolls back from where the user is now
-              offsetBeforeScroll.value = scroll.value - padding.value;
+              // Non-inverted: undo only the actual scroll displacement
+              // (accounting for blank absorption at open time)
+              const prevBlankAbsorbed =
+                getBlankAbsorbed(
+                  blankSize.value,
+                  extraContentPadding.value,
+                ) * blankFractionOnOpen.value;
+              const prevScrollEff = getScrollEffective(
+                padding.value,
+                prevBlankAbsorbed,
+              );
+
+              offsetBeforeScroll.value = scroll.value - prevScrollEff;
             }
           }
         }
@@ -264,37 +274,13 @@ function useChatKeyboard(
             effective + extraContentPadding.value,
           );
 
-          // "never" closing: scroll along when at end to avoid jump
+          // "never" closing: clamp scroll to valid range as inset shrinks
           if (
             keyboardLiftBehavior === "never" &&
             closing.value &&
             effective < padding.value
           ) {
-            if (scrollEff === 0 && blankAbsorbed > 0) {
-              return;
-            }
-
-            const wasAtEnd = isScrollAtEnd(
-              offsetBeforeScroll.value + padding.value,
-              layout.value.height,
-              size.value.height,
-              false,
-            );
-
-            if (wasAtEnd) {
-              const target = clampedScrollTarget(
-                offsetBeforeScroll.value,
-                scrollEff,
-                size.value.height,
-                layout.value.height,
-                actualTotalPadding,
-              );
-
-              scrollTo(scrollViewRef, 0, target, false);
-            } else {
-              // Clamp to valid range as padding shrinks
-              clampScrollIfNeeded(effective, actualTotalPadding);
-            }
+            clampScrollIfNeeded(effective, actualTotalPadding);
 
             return;
           }
