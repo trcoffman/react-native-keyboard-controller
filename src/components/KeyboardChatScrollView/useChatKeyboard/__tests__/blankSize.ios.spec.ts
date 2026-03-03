@@ -4,7 +4,6 @@ import {
   createRender,
   mockLayout,
   mockOffset,
-  mockScrollTo,
   mockSize,
   setupBeforeEach,
   sv,
