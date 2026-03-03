@@ -1,0 +1,18 @@
+0 verbose cli /Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/bin/node /Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@10.9.4
+2 info using node@v22.21.1
+3 silly config load:file:/Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/tyler.coffman/github/react-native-keyboard-controller/.npmrc
+5 silly config load:file:/Users/tyler.coffman/.npmrc
+6 silly config load:file:/Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/etc/npmrc
+7 verbose title npm exec jest src/components/KeyboardChatScrollView/useChatKeyboard/__tests__/index.android.spec.ts --no-coverage
+8 verbose argv "exec" "--" "jest" "src/components/KeyboardChatScrollView/useChatKeyboard/__tests__/index.android.spec.ts" "--no-coverage"
+9 verbose logfile logs-max:10 dir:/Users/tyler.coffman/github/react-native-keyboard-controller/tmp/node_cache/_logs/2026-03-03T17_12_39_545Z-
+10 verbose logfile /Users/tyler.coffman/github/react-native-keyboard-controller/tmp/node_cache/_logs/2026-03-03T17_12_39_545Z-debug-0.log
+11 silly logfile done cleaning log files
+12 verbose cwd /Users/tyler.coffman/github/react-native-keyboard-controller
+13 verbose os Darwin 24.6.0
+14 verbose node v22.21.1
+15 verbose npm  v10.9.4
+16 verbose exit 1
+17 verbose code 1

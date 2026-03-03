@@ -100,16 +100,60 @@ export function shouldShiftContent(
 }
 
 /**
+ * Compute how much of the blank space absorbs the keyboard + extraContentPadding.
+ *
+ * @param blankSize - Minimum inset floor.
+ * @param extraContentPadding - Extra content padding from external elements.
+ * @returns The portion of blankSize that absorbs keyboard displacement.
+ * @example
+ * ```ts
+ * getBlankAbsorbed(500, 20); // 480
+ * getBlankAbsorbed(0, 20);   // 0
+ * ```
+ */
+export function getBlankAbsorbed(
+  blankSize: number,
+  extraContentPadding: number,
+): number {
+  "worklet";
+
+  return Math.max(0, blankSize - extraContentPadding);
+}
+
+/**
+ * Compute the effective scroll displacement after blank absorption.
+ *
+ * @param rawEffective - Raw effective keyboard height.
+ * @param blankAbsorbed - Amount absorbed by blank space.
+ * @returns The scroll displacement after subtracting the absorbed portion.
+ * @example
+ * ```ts
+ * getScrollEffective(300, 200); // 100
+ * getScrollEffective(300, 400); // 0
+ * ```
+ */
+export function getScrollEffective(
+  rawEffective: number,
+  blankAbsorbed: number,
+): number {
+  "worklet";
+
+  return Math.max(0, rawEffective - blankAbsorbed);
+}
+
+/**
  * Compute the clamped scroll target for non-inverted lists.
  *
  * @param offsetBeforeScroll - Scroll position before keyboard appeared.
- * @param keyboardHeight - Current keyboard height.
+ * @param keyboardHeight - Current keyboard height (used for scroll displacement).
  * @param contentHeight - Total height of the scrollable content.
  * @param layoutHeight - Visible height of the scroll view.
+ * @param totalPaddingForMaxScroll - Total padding to use for maxScroll calculation. When provided, used instead of keyboardHeight for the scrollable range. Defaults to keyboardHeight.
  * @returns Clamped scroll target between 0 and maxScroll.
  * @example
  * ```ts
  * clampedScrollTarget(100, 300, 1000, 800); // 400
+ * clampedScrollTarget(100, 100, 1000, 800, 500); // 200, maxScroll uses 500
  * ```
  */
 export function clampedScrollTarget(
@@ -117,10 +161,15 @@ export function clampedScrollTarget(
   keyboardHeight: number,
   contentHeight: number,
   layoutHeight: number,
+  totalPaddingForMaxScroll?: number,
 ): number {
   "worklet";
 
-  const maxScroll = Math.max(contentHeight - layoutHeight + keyboardHeight, 0);
+  const paddingForMax =
+    totalPaddingForMaxScroll !== undefined
+      ? totalPaddingForMaxScroll
+      : keyboardHeight;
+  const maxScroll = Math.max(contentHeight - layoutHeight + paddingForMax, 0);
 
   return Math.min(Math.max(offsetBeforeScroll + keyboardHeight, 0), maxScroll);
 }
@@ -129,10 +178,11 @@ export function clampedScrollTarget(
  * Compute contentOffset.y for iOS lists.
  *
  * @param relativeScroll - Scroll position relative to current inset.
- * @param keyboardHeight - Target keyboard height.
+ * @param keyboardHeight - Target keyboard height (used for scroll displacement).
  * @param contentHeight - Total height of the scrollable content.
  * @param layoutHeight - Visible height of the scroll view.
  * @param inverted - Whether the list is inverted.
+ * @param totalPaddingForMaxScroll - Total padding to use for maxScroll calculation. When provided, used instead of keyboardHeight for the scrollable range. Defaults to keyboardHeight.
  * @returns The absolute contentOffset.y to set.
  * @example
  * ```ts
@@ -145,19 +195,25 @@ export function computeIOSContentOffset(
   contentHeight: number,
   layoutHeight: number,
   inverted: boolean,
+  totalPaddingForMaxScroll?: number,
 ): number {
   "worklet";
+
+  const paddingForMax =
+    totalPaddingForMaxScroll !== undefined
+      ? totalPaddingForMaxScroll
+      : keyboardHeight;
 
   if (inverted) {
     const maxScroll = Math.max(contentHeight - layoutHeight, 0);
 
     return Math.max(
       Math.min(relativeScroll - keyboardHeight, maxScroll),
-      -keyboardHeight,
+      -paddingForMax,
     );
   }
 
-  const maxScroll = Math.max(contentHeight - layoutHeight + keyboardHeight, 0);
+  const maxScroll = Math.max(contentHeight - layoutHeight + paddingForMax, 0);
 
   return Math.min(Math.max(keyboardHeight + relativeScroll, 0), maxScroll);
 }

@@ -108,7 +108,7 @@ const AIChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [extraContentPaddingIndex, setExtraContentPaddingIndex] = useState<
+  const [blankSizeIndex, setBlankSizeIndex] = useState<
     number | undefined
   >(undefined);
   const listRef = useRef<LegendListRef>(null);
@@ -129,7 +129,7 @@ const AIChat = () => {
   }, []);
 
   const doSendMessage = (text: string) => {
-    setExtraContentPaddingIndex(messages.length);
+    setBlankSizeIndex(messages.length);
 
     setMessages((prevMessages) => [
       ...prevMessages,
@@ -271,7 +271,7 @@ This makes it possible to scroll through thousands of items without performance 
         style={styles.container}
       >
         <KeyboardChatLegendList
-          extraContentPaddingIndex={extraContentPaddingIndex}
+          blankSizeIndex={blankSizeIndex}
           contentContainerStyle={styles.contentContainer}
           data={messages}
           initialScrollAtEnd

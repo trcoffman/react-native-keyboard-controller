@@ -1,0 +1,19 @@
+0 verbose cli /Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/bin/node /Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@10.9.4
+2 info using node@v22.21.1
+3 silly config load:file:/Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/tyler.coffman/github/react-native-keyboard-controller/.npmrc
+5 silly config load:file:/Users/tyler.coffman/.npmrc
+6 silly config load:file:/Users/tyler.coffman/.local/share/mise/installs/node/22.21.1/etc/npmrc
+7 verbose title npm exec jest --config jest.config.js src/components/KeyboardChatScrollView/useChatKeyboard/__tests__/helpers.spec.ts --no-coverage
+8 verbose argv "exec" "--" "jest" "--config" "jest.config.js" "src/components/KeyboardChatScrollView/useChatKeyboard/__tests__/helpers.spec.ts" "--no-coverage"
+9 verbose logfile logs-max:10 dir:/Users/tyler.coffman/github/react-native-keyboard-controller/tmp/node_cache/_logs/2026-03-03T17_11_56_246Z-
+10 verbose logfile /Users/tyler.coffman/github/react-native-keyboard-controller/tmp/node_cache/_logs/2026-03-03T17_11_56_246Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET 401 https://appfolio-ecr-195334327833.d.codeartifact.us-west-2.amazonaws.com/npm/appfolio-repo/npm 174ms
+13 verbose cwd /Users/tyler.coffman/github/react-native-keyboard-controller
+14 verbose os Darwin 24.6.0
+15 verbose node v22.21.1
+16 verbose npm  v10.9.4
+17 verbose exit 1
+18 verbose code 1
