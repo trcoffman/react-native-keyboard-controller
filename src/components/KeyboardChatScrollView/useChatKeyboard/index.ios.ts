@@ -8,6 +8,7 @@ import {
   getBlankAbsorbed,
   getEffectiveHeight,
   getScrollEffective,
+  getVisibleBlankFraction,
   isScrollAtEnd,
   shouldShiftContent,
 } from "./helpers";
@@ -78,21 +79,29 @@ function useChatKeyboard(
           offset,
         );
 
-        const blankAbsorbed = getBlankAbsorbed(
-          blankSize.value,
-          extraContentPadding.value,
-        );
-        const scrollEff = getScrollEffective(effective, blankAbsorbed);
-        const actualTotalPadding = Math.max(
-          blankSize.value,
-          effective + extraContentPadding.value,
-        );
-
         const atEnd = isScrollAtEnd(
           scroll.value,
           layout.value.height,
           size.value.height,
           inverted,
+        );
+
+        // Scale blank absorption by how much of the blank is visible.
+        // Fully visible → full absorption; fully off-screen → no absorption.
+        const visibleFraction = getVisibleBlankFraction(
+          scroll.value,
+          layout.value.height,
+          size.value.height,
+          blankSize.value,
+          inverted,
+        );
+        const blankAbsorbed =
+          getBlankAbsorbed(blankSize.value, extraContentPadding.value) *
+          visibleFraction;
+        const scrollEff = getScrollEffective(effective, blankAbsorbed);
+        const actualTotalPadding = Math.max(
+          blankSize.value,
+          effective + extraContentPadding.value,
         );
 
         // persistent mode: when keyboard shrinks, snap to end or hold position

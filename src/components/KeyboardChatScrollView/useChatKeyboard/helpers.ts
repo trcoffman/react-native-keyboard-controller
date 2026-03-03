@@ -100,6 +100,55 @@ export function shouldShiftContent(
 }
 
 /**
+ * Compute the fraction of blank space currently visible in the viewport (0–1).
+ *
+ * The blank space lives in the scroll view's contentInset, NOT in the
+ * content itself.  So `contentHeight` (from onContentSizeChange / scroll
+ * events) does **not** include the blank.  The visible blank is how far the
+ * viewport extends past the content boundary into the inset area.
+ *
+ * For non-inverted lists the blank is in contentInset.bottom.
+ * For inverted lists the blank is in contentInset.top (negative scroll).
+ *
+ * @param scrollOffset - Current vertical scroll offset.
+ * @param layoutHeight - Visible height of the scroll view.
+ * @param contentHeight - Height of the scroll content (excludes insets).
+ * @param blankSize - Size of the blank inset area.
+ * @param inverted - Whether the list is inverted.
+ * @returns A value between 0 (blank fully off-screen) and 1 (blank fully visible).
+ * @example
+ * ```ts
+ * // Non-inverted: contentHeight=1500, layout=800, blankSize=300
+ * getVisibleBlankFraction(1500, 800, 1500, 300, false); // 1   (at end, viewport past content)
+ * getVisibleBlankFraction(850, 800, 1500, 300, false);  // 0.5 (half blank visible)
+ * getVisibleBlankFraction(700, 800, 1500, 300, false);  // 0   (blank off-screen)
+ * ```
+ */
+export function getVisibleBlankFraction(
+  scrollOffset: number,
+  layoutHeight: number,
+  contentHeight: number,
+  blankSize: number,
+  inverted: boolean,
+): number {
+  "worklet";
+
+  if (blankSize <= 0) {
+    return 0;
+  }
+
+  if (inverted) {
+    // Blank is in contentInset.top; visible when scroll < 0
+    return Math.max(0, Math.min(1, -scrollOffset / blankSize));
+  }
+
+  // Blank is in contentInset.bottom; visible when viewport extends past content
+  const pastContentEnd = scrollOffset + layoutHeight - contentHeight;
+
+  return Math.max(0, Math.min(1, pastContentEnd / blankSize));
+}
+
+/**
  * Compute how much of the blank space absorbs the keyboard + extraContentPadding.
  *
  * @param blankSize - Minimum inset floor.

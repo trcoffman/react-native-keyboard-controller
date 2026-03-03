@@ -8,6 +8,7 @@ import {
   getBlankAbsorbed,
   getEffectiveHeight,
   getScrollEffective,
+  getVisibleBlankFraction,
   isScrollAtEnd,
   shouldShiftContent,
 } from "./helpers";
@@ -47,6 +48,7 @@ function useChatKeyboard(
   const offsetBeforeScroll = useSharedValue(0);
   const targetKeyboardHeight = useSharedValue(0);
   const closing = useSharedValue(false);
+  const blankFractionOnOpen = useSharedValue(0);
   const {
     layout,
     size,
@@ -97,18 +99,26 @@ function useChatKeyboard(
           offset,
         );
 
-        const blankAbsorbed = getBlankAbsorbed(
-          blankSize.value,
-          extraContentPadding.value,
-        );
-        const scrollEff = getScrollEffective(effective, blankAbsorbed);
-
         const atEnd = isScrollAtEnd(
           scroll.value,
           layout.value.height,
           size.value.height,
           inverted,
         );
+
+        // Scale blank absorption by how much of the blank is visible.
+        // Fully visible → full absorption; fully off-screen → no absorption.
+        const visibleFraction = getVisibleBlankFraction(
+          scroll.value,
+          layout.value.height,
+          size.value.height,
+          blankSize.value,
+          inverted,
+        );
+        const blankAbsorbed =
+          getBlankAbsorbed(blankSize.value, extraContentPadding.value) *
+          visibleFraction;
+        const scrollEff = getScrollEffective(effective, blankAbsorbed);
 
         if (inverted && e.duration === -1) {
           // Android inverted: skip post-interactive snap-back events
@@ -117,6 +127,7 @@ function useChatKeyboard(
           return;
         } else if (e.height > 0) {
           // Android: keyboard opening — set padding + capture scroll position
+          blankFractionOnOpen.value = visibleFraction;
           padding.value = effective;
           offsetBeforeScroll.value = scroll.value;
 
@@ -165,10 +176,9 @@ function useChatKeyboard(
             offset,
           );
 
-          const blankAbsorbed = getBlankAbsorbed(
-            blankSize.value,
-            extraContentPadding.value,
-          );
+          const blankAbsorbed =
+            getBlankAbsorbed(blankSize.value, extraContentPadding.value) *
+            blankFractionOnOpen.value;
           const scrollEff = getScrollEffective(effective, blankAbsorbed);
           const actualTotalPadding = Math.max(
             blankSize.value,
@@ -245,10 +255,9 @@ function useChatKeyboard(
             offset,
           );
 
-          const blankAbsorbed = getBlankAbsorbed(
-            blankSize.value,
-            extraContentPadding.value,
-          );
+          const blankAbsorbed =
+            getBlankAbsorbed(blankSize.value, extraContentPadding.value) *
+            blankFractionOnOpen.value;
           const scrollEff = getScrollEffective(effective, blankAbsorbed);
           const actualTotalPadding = Math.max(
             blankSize.value,
