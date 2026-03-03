@@ -108,9 +108,9 @@ const AIChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [blankSizeIndex, setBlankSizeIndex] = useState<
-    number | undefined
-  >(undefined);
+  const [blankSizeIndex, setBlankSizeIndex] = useState<number | undefined>(
+    undefined,
+  );
   const listRef = useRef<LegendListRef>(null);
   const inputRef = useRef<TextInput>(null);
   const hasInitialized = useRef(false);
@@ -278,7 +278,7 @@ This makes it possible to scroll through thousands of items without performance 
           keyExtractor={(_item, index) => `item-${index}`}
           maintainScrollAtEnd={Platform.OS === "web" || isInputFocused}
           maintainVisibleContentPosition
-          keyboardLiftBehavior="never"
+          keyboardLiftBehavior="whenAtEnd"
           offset={insets.bottom}
           ref={listRef}
           renderItem={({ item }) => (
