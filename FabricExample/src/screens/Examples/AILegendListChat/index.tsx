@@ -1,5 +1,7 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -32,32 +34,75 @@ type Message = {
   timeStamp: number;
   isPlaceholder?: boolean;
   isNew?: boolean;
-  streamingSpeed?: number;
+  stream?: boolean;
 };
 
+const StreamingContext = createContext<{
+  setIsStreaming: (value: boolean) => void;
+}>({ setIsStreaming: () => {} });
+
 const createId = () => String(Date.now());
+
+const INITIAL_AI_TEXT = `Tip: Type 'a' for a short reply, 'b' for medium, 'c' for long, or 'd' for extra long. Any other text picks a random length.
+
+React Native virtualization is a performance optimization technique that's crucial for handling large lists efficiently. Here's how it works:
+
+1. **Rendering Only Visible Items**: Instead of rendering all items in a list at once, virtualization only renders the items that are currently visible on screen, plus a small buffer of items just outside the visible area.
+
+2. **Dynamic Item Creation/Destruction**: As you scroll, items that move out of view are removed from the DOM/native view hierarchy, and new items that come into view are created. This keeps memory usage constant regardless of list size.
+
+3. **View Recycling**: Advanced virtualization systems reuse view components rather than creating new ones, which reduces garbage collection and improves performance.
+
+4. **Estimated vs Actual Sizing**: The system uses estimated item sizes to calculate scroll positions and total content size, then adjusts as actual sizes are measured.
+
+5. **Legend List Implementation**: Legend List enhances this by providing better handling of dynamic item sizes, bidirectional scrolling, and maintains scroll position more accurately than FlatList.
+
+The key benefits are:
+- Constant memory usage regardless of data size
+- Smooth scrolling performance
+- Better handling of dynamic content
+- Reduced time to interactive
+
+This makes it possible to scroll through thousands of items without performance degradation, which is essential for modern mobile apps dealing with large datasets like social media feeds, chat histories, or product catalogs.
+
+Tip: Type 'a' for a short reply, 'b' for medium, 'c' for long, or 'd' for extra long. Any other text picks a random length.`;
+
+const INITIAL_MESSAGES: Message[] = [
+  {
+    id: "initial-user",
+    sender: "user",
+    text: "Hey, can you help me understand how React Native virtualization works?",
+    timeStamp: Date.now(),
+  },
+  {
+    id: "initial-ai",
+    sender: "system",
+    text: INITIAL_AI_TEXT,
+    timeStamp: Date.now(),
+  },
+];
 
 const AIResponse = ({
   text,
   isPlaceholder,
   timeStamp,
-  streamingSpeed = 15,
+  stream,
 }: {
   text: string;
   isPlaceholder: boolean;
   timeStamp: number;
-  streamingSpeed?: number;
+  stream?: boolean;
 }) => {
-  const [displayedText, setDisplayedText] = useState("");
+  const [displayedText, setDisplayedText] = useState(stream ? "" : text);
+  const { setIsStreaming } = useContext(StreamingContext);
 
   useEffect(() => {
-    if (isPlaceholder || !text) {
-      setDisplayedText("");
-      return;
-    }
+    if (!stream || isPlaceholder || !text) return;
 
     const words = text.split(" ");
     let currentWordIndex = 0;
+
+    setIsStreaming(true);
 
     const intervalId = setInterval(() => {
       currentWordIndex++;
@@ -65,11 +110,21 @@ const AIResponse = ({
         setDisplayedText(words.slice(0, currentWordIndex).join(" "));
       } else {
         clearInterval(intervalId);
+        setIsStreaming(false);
       }
-    }, streamingSpeed);
+    }, 15);
 
-    return () => clearInterval(intervalId);
-  }, [text, isPlaceholder, streamingSpeed]);
+    return () => {
+      clearInterval(intervalId);
+      setIsStreaming(false);
+    };
+  }, [text, isPlaceholder, stream, setIsStreaming]);
+
+  useEffect(() => {
+    if (!stream) {
+      setDisplayedText(text);
+    }
+  }, [text, stream]);
 
   if (isPlaceholder) {
     return (
@@ -135,8 +190,9 @@ function pickReply(input: string, userMessage: string): string {
 }
 
 const AIChat = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
   const [inputText, setInputText] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [liftBehavior, setLiftBehavior] = useState<LiftBehavior>("whenAtEnd");
   const [blankSizeIndex, setBlankSizeIndex] = useState<number | undefined>(
@@ -145,21 +201,25 @@ const AIChat = () => {
   const listRef = useRef<LegendListRef>(null);
   const inputRef = useRef<TextInput>(null);
   const composerRef = useRef<View>(null);
-  const hasInitialized = useRef(false);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const insets = useSafeAreaInsets();
-  const composerHeight = useSharedValue(0);
+  // have to set an initial value higher than it will actually end up,
+  // because reportContentInset doesn't work on android to ensure
+  // initialScrollAtEnd works with extraContentPadding
+  const composerHeight = useSharedValue(100);
 
   useLayoutEffect(() => {
-    const node = composerRef.current;
-    if (node && typeof node.getBoundingClientRect === "function") {
-      composerHeight.value = node.getBoundingClientRect().height;
-    }
+    composerRef.current?.measure((_x, _y, _width, height) => {
+      composerHeight.value = height;
+      listRef.current?.reportContentInset({ bottom: height });
+    });
   }, []);
 
   const onComposerLayout = useCallback(
     (event: { nativeEvent: { layout: { height: number } } }) => {
-      composerHeight.value = event.nativeEvent.layout.height;
+      const { height } = event.nativeEvent.layout;
+      composerHeight.value = height;
+      listRef.current?.reportContentInset({ bottom: height });
     },
     [],
   );
@@ -236,7 +296,7 @@ const AIChat = () => {
       setMessages((prevMessages) =>
         prevMessages.map((msg) =>
           msg.id === aiMessageId
-            ? { ...msg, isPlaceholder: false, text: responseText }
+            ? { ...msg, isPlaceholder: false, text: responseText, stream: true }
             : msg,
         ),
       );
@@ -244,158 +304,105 @@ const AIChat = () => {
   };
 
   useEffect(() => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
-
-    const initialAiMessageId = createId();
-
-    const fullText = `Tip: Type 'a' for a short reply, 'b' for medium, 'c' for long, or 'd' for extra long. Any other text picks a random length.
-
-React Native virtualization is a performance optimization technique that's crucial for handling large lists efficiently. Here's how it works:
-
-1. **Rendering Only Visible Items**: Instead of rendering all items in a list at once, virtualization only renders the items that are currently visible on screen, plus a small buffer of items just outside the visible area.
-
-2. **Dynamic Item Creation/Destruction**: As you scroll, items that move out of view are removed from the DOM/native view hierarchy, and new items that come into view are created. This keeps memory usage constant regardless of list size.
-
-3. **View Recycling**: Advanced virtualization systems reuse view components rather than creating new ones, which reduces garbage collection and improves performance.
-
-4. **Estimated vs Actual Sizing**: The system uses estimated item sizes to calculate scroll positions and total content size, then adjusts as actual sizes are measured.
-
-5. **Legend List Implementation**: Legend List enhances this by providing better handling of dynamic item sizes, bidirectional scrolling, and maintains scroll position more accurately than FlatList.
-
-The key benefits are:
-- Constant memory usage regardless of data size
-- Smooth scrolling performance
-- Better handling of dynamic content
-- Reduced time to interactive
-
-This makes it possible to scroll through thousands of items without performance degradation, which is essential for modern mobile apps dealing with large datasets like social media feeds, chat histories, or product catalogs.`;
-
-    schedule(() => {
-      setMessages([
-        {
-          id: createId(),
-          sender: "user",
-          text: "Hey, can you help me understand how React Native virtualization works?",
-          timeStamp: Date.now(),
-        },
-        {
-          id: initialAiMessageId,
-          isPlaceholder: true,
-          sender: "system",
-          text: "",
-          timeStamp: Date.now(),
-        },
-      ]);
-    }, 500);
-
-    schedule(() => {
-      setMessages((prevMessages) =>
-        prevMessages.map((msg) =>
-          msg.id === initialAiMessageId
-            ? {
-                ...msg,
-                isPlaceholder: false,
-                text: fullText,
-                streamingSpeed: 1,
-              }
-            : msg,
-        ),
-      );
-    }, 1500);
-
     return clearAllTimers;
-  }, [clearAllTimers, schedule]);
+  }, [clearAllTimers]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.behaviorBar}>
-        {LIFT_BEHAVIORS.map((b) => (
-          <Text
-            key={b}
-            onPress={() => setLiftBehavior(b)}
+    <StreamingContext.Provider value={{ setIsStreaming }}>
+      <View style={styles.container}>
+        <View style={styles.behaviorBar}>
+          {LIFT_BEHAVIORS.map((b) => (
+            <Text
+              key={b}
+              onPress={() => setLiftBehavior(b)}
+              style={[
+                styles.behaviorButton,
+                b === liftBehavior && styles.behaviorButtonActive,
+              ]}
+            >
+              {b}
+            </Text>
+          ))}
+        </View>
+        <KeyboardGestureArea
+          interpolator="ios"
+          offset={60}
+          style={styles.container}
+        >
+          <KeyboardChatLegendList
+            blankSizeIndex={blankSizeIndex}
+            contentContainerStyle={styles.contentContainer}
+            data={messages}
+            extraContentPadding={composerHeight}
+            initialScrollAtEnd
+            keyExtractor={(_item, index) => `item-${index}`}
+            maintainScrollAtEnd={Platform.OS === "web"}
+            maintainVisibleContentPosition
+            keyboardLiftBehavior={liftBehavior}
+            offset={insets.bottom}
+            ref={listRef}
+            renderItem={({ item }) => (
+              <View>
+                {item.sender === "user" ? (
+                  <Animated.View
+                    entering={item.isNew ? FadeIn.duration(1000) : undefined}
+                    style={[
+                      styles.messageContainer,
+                      styles.userMessageContainer,
+                      styles.userStyle,
+                    ]}
+                  >
+                    <Text style={[styles.messageText, styles.userMessageText]}>
+                      {item.text}
+                    </Text>
+                    <View style={[styles.timeStamp, styles.userStyle]}>
+                      <Text style={styles.timeStampText}>
+                        {new Date(item.timeStamp).toLocaleTimeString()}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                ) : (
+                  <AIResponse
+                    isPlaceholder={!!item.isPlaceholder}
+                    stream={item.stream}
+                    text={item.text}
+                    timeStamp={item.timeStamp}
+                  />
+                )}
+              </View>
+            )}
+            style={styles.list}
+          />
+        </KeyboardGestureArea>
+        <KeyboardStickyView
+          offset={{ closed: 0, opened: insets.bottom }}
+          style={styles.composerWrapper}
+        >
+          <View
+            onLayout={onComposerLayout}
+            ref={composerRef}
             style={[
-              styles.behaviorButton,
-              b === liftBehavior && styles.behaviorButtonActive,
+              styles.inputContainer,
+              { paddingBottom: insets.bottom + 10 },
             ]}
           >
-            {b}
-          </Text>
-        ))}
+            <TextInput
+              editable={!isStreaming}
+              focusable={!isStreaming}
+              multiline
+              onBlur={() => setIsInputFocused(false)}
+              onChangeText={setInputText}
+              onFocus={() => setIsInputFocused(true)}
+              placeholder="Type a message"
+              ref={inputRef}
+              style={styles.input}
+              value={inputText}
+            />
+            <Button disabled={isStreaming} onPress={sendMessage} title="Send" />
+          </View>
+        </KeyboardStickyView>
       </View>
-      <KeyboardGestureArea
-        interpolator="ios"
-        offset={60}
-        style={styles.container}
-      >
-        <KeyboardChatLegendList
-          blankSizeIndex={blankSizeIndex}
-          contentContainerStyle={styles.contentContainer}
-          data={messages}
-          extraContentPadding={composerHeight}
-          initialScrollAtEnd
-          keyExtractor={(_item, index) => `item-${index}`}
-          maintainScrollAtEnd={Platform.OS === "web"}
-          maintainVisibleContentPosition
-          keyboardLiftBehavior={liftBehavior}
-          offset={insets.bottom}
-          ref={listRef}
-          renderItem={({ item }) => (
-            <View>
-              {item.sender === "user" ? (
-                <Animated.View
-                  entering={item.isNew ? FadeIn.duration(1000) : undefined}
-                  style={[
-                    styles.messageContainer,
-                    styles.userMessageContainer,
-                    styles.userStyle,
-                  ]}
-                >
-                  <Text style={[styles.messageText, styles.userMessageText]}>
-                    {item.text}
-                  </Text>
-                  <View style={[styles.timeStamp, styles.userStyle]}>
-                    <Text style={styles.timeStampText}>
-                      {new Date(item.timeStamp).toLocaleTimeString()}
-                    </Text>
-                  </View>
-                </Animated.View>
-              ) : (
-                <AIResponse
-                  isPlaceholder={!!item.isPlaceholder}
-                  streamingSpeed={item.streamingSpeed}
-                  text={item.text}
-                  timeStamp={item.timeStamp}
-                />
-              )}
-            </View>
-          )}
-          style={styles.list}
-        />
-      </KeyboardGestureArea>
-      <KeyboardStickyView
-        offset={{ closed: 0, opened: insets.bottom }}
-        style={styles.composerWrapper}
-      >
-        <View
-          onLayout={onComposerLayout}
-          ref={composerRef}
-          style={[styles.inputContainer, { paddingBottom: insets.bottom + 10 }]}
-        >
-          <TextInput
-            multiline
-            onBlur={() => setIsInputFocused(false)}
-            onChangeText={setInputText}
-            onFocus={() => setIsInputFocused(true)}
-            placeholder="Type a message"
-            ref={inputRef}
-            style={styles.input}
-            value={inputText}
-          />
-          <Button onPress={sendMessage} title="Send" />
-        </View>
-      </KeyboardStickyView>
-    </View>
+    </StreamingContext.Provider>
   );
 };
 
