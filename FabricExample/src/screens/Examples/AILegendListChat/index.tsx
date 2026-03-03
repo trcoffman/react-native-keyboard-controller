@@ -227,7 +227,9 @@ const AIChat = () => {
 
     const initialAiMessageId = createId();
 
-    const fullText = `React Native virtualization is a performance optimization technique that's crucial for handling large lists efficiently. Here's how it works:
+    const fullText = `Tip: Type 'a' for a short reply, 'b' for medium, 'c' for long, or 'd' for extra long. Any other text picks a random length.
+
+React Native virtualization is a performance optimization technique that's crucial for handling large lists efficiently. Here's how it works:
 
 1. **Rendering Only Visible Items**: Instead of rendering all items in a list at once, virtualization only renders the items that are currently visible on screen, plus a small buffer of items just outside the visible area.
 
