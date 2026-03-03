@@ -54,7 +54,9 @@ describe("blankSize — Android non-inverted + always", () => {
   });
 
   it("full absorption: no scroll movement when blankSize > keyboard", () => {
-    mockOffset.value = 100;
+    // Small content so blank fills viewport (pastContentEnd = 0+800-300 = 500, fraction = 1)
+    mockSize.value = { width: 390, height: 300 };
+    mockOffset.value = 0;
     render({
       inverted: false,
       keyboardLiftBehavior: "always",
@@ -63,13 +65,16 @@ describe("blankSize — Android non-inverted + always", () => {
 
     handlers.onStart({ height: KEYBOARD });
 
-    // scrollEff = max(0, 300 - 500) = 0 → sentinel set, no scrollTo
+    // blankAbsorbed=500, scrollEff=0 → sentinel set, no scrollTo
     handlers.onMove({ height: KEYBOARD });
     expect(mockScrollTo).not.toHaveBeenCalled();
   });
 
   it("partial absorption: reduced scroll displacement", () => {
-    mockOffset.value = 100;
+    // Content slightly smaller than viewport so blank is fully visible
+    // (pastContentEnd = 0+800-700 = 100, fraction = 100/100 = 1)
+    mockSize.value = { width: 390, height: 700 };
+    mockOffset.value = 0;
     render({
       inverted: false,
       keyboardLiftBehavior: "always",
@@ -79,15 +84,17 @@ describe("blankSize — Android non-inverted + always", () => {
     handlers.onStart({ height: KEYBOARD });
     // blankAbsorbed = 100, scrollEff = max(0, 200-100) = 100
     // actualTotalPadding = max(100, 200+0) = 200
-    // target = clampedScrollTarget(100, 100, 2000, 800, 200)
-    //        = min(max(100+100, 0), max(2000-800+200, 0))
-    //        = min(200, 1400) = 200
+    // target = clampedScrollTarget(0, 100, 700, 800, 200)
+    //        = min(max(0+100, 0), max(700-800+200, 0))
+    //        = min(100, 100) = 100
     handlers.onMove({ height: 200 });
-    expect(mockScrollTo).toHaveBeenCalledWith(expect.anything(), 0, 200, false);
+    expect(mockScrollTo).toHaveBeenCalledWith(expect.anything(), 0, 100, false);
   });
 
   it("full absorption with extraContentPadding: blank absorbed = blankSize - extraContentPadding", () => {
-    mockOffset.value = 100;
+    // Small content so blank fills viewport (pastContentEnd = 0+800-300 = 500, fraction = 1)
+    mockSize.value = { width: 390, height: 300 };
+    mockOffset.value = 0;
     const ecp = sv(50);
     render({
       inverted: false,
@@ -97,7 +104,7 @@ describe("blankSize — Android non-inverted + always", () => {
     });
 
     handlers.onStart({ height: KEYBOARD });
-    // blankAbsorbed = max(0, 500 - 50) = 450
+    // blankAbsorbed = max(0, 500 - 50) * 1 = 450
     // scrollEff = max(0, 300 - 450) = 0 → sentinel → no scroll
     handlers.onMove({ height: KEYBOARD });
     expect(mockScrollTo).not.toHaveBeenCalled();
@@ -106,6 +113,9 @@ describe("blankSize — Android non-inverted + always", () => {
 
 describe("blankSize — Android inverted + always", () => {
   it("full absorption: no scroll movement when blankSize > keyboard", () => {
+    // Inverted: blank at top, visible when scroll < 0
+    // fraction = -(-500)/500 = 1
+    mockOffset.value = -500;
     render({
       inverted: true,
       keyboardLiftBehavior: "always",
@@ -119,6 +129,8 @@ describe("blankSize — Android inverted + always", () => {
   });
 
   it("partial absorption: reduced scroll displacement (inverted)", () => {
+    // Inverted: fraction = -(-100)/100 = 1
+    mockOffset.value = -100;
     render({
       inverted: true,
       keyboardLiftBehavior: "always",
@@ -127,9 +139,9 @@ describe("blankSize — Android inverted + always", () => {
 
     handlers.onStart({ height: KEYBOARD });
     // blankAbsorbed=100, scrollEff=max(0,200-100)=100
-    // target = offsetBefore(0) + padding(300) - scrollEff(100) = 200
+    // target = offsetBefore(-100) + padding(300) - scrollEff(100) = 100
     handlers.onMove({ height: 200 });
-    expect(mockScrollTo).toHaveBeenCalledWith(expect.anything(), 0, 200, false);
+    expect(mockScrollTo).toHaveBeenCalledWith(expect.anything(), 0, 100, false);
   });
 });
 
@@ -155,6 +167,8 @@ describe("blankSize — Android never behavior", () => {
   });
 
   it("full absorption: no scroll on close (inverted)", () => {
+    // Inverted: fraction = -(-500)/500 = 1
+    mockOffset.value = -500;
     render({
       inverted: true,
       keyboardLiftBehavior: "never",
@@ -166,7 +180,7 @@ describe("blankSize — Android never behavior", () => {
     mockScrollTo.mockClear();
 
     handlers.onStart({ height: 0 });
-    // effective=150, blankAbsorbed=500, scrollEff=0 → skip
+    // blankAbsorbed=500*1=500, scrollEff=0 → skip
     handlers.onMove({ height: 150 });
     expect(mockScrollTo).not.toHaveBeenCalled();
   });
@@ -174,9 +188,10 @@ describe("blankSize — Android never behavior", () => {
 
 describe("blankSize — Android whenAtEnd behavior", () => {
   it("full absorption prevents scroll even when at end", () => {
-    // Position at end: offset + layout >= content - threshold
-    // 1180 + 800 = 1980 >= 2000 - 20 = 1980
-    mockOffset.value = 1180;
+    // Small content so blank fills viewport (pastContentEnd = 0+800-300 = 500, fraction = 1)
+    // Position at end: 0 + 800 >= 300 - 20
+    mockSize.value = { width: 390, height: 300 };
+    mockOffset.value = 0;
     render({
       inverted: false,
       keyboardLiftBehavior: "whenAtEnd",
