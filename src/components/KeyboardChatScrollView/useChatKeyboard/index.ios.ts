@@ -158,8 +158,9 @@ function useChatKeyboard(
           return;
         }
 
-        // When blankSize fully absorbs the keyboard, preserve current scroll position
-        if (scrollEff === 0 && blankAbsorbed > 0) {
+        // When blankSize fully absorbs the keyboard opening, preserve current scroll position
+        // (only when keyboard is open — effective > 0 — not when closing)
+        if (scrollEff === 0 && blankAbsorbed > 0 && effective > 0) {
           contentOffsetY.value = scroll.value;
 
           return;
