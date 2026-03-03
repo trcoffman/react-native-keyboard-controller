@@ -107,6 +107,7 @@ const AIResponse = ({
 const AIChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const [extraContentPaddingIndex, setExtraContentPaddingIndex] = useState<
     number | undefined
   >(undefined);
@@ -275,7 +276,7 @@ This makes it possible to scroll through thousands of items without performance 
           data={messages}
           initialScrollAtEnd
           keyExtractor={(_item, index) => `item-${index}`}
-          maintainScrollAtEnd={Platform.OS === "web"}
+          maintainScrollAtEnd={Platform.OS === "web" || isInputFocused}
           maintainVisibleContentPosition
           keyboardLiftBehavior="never"
           offset={insets.bottom}
@@ -319,7 +320,9 @@ This makes it possible to scroll through thousands of items without performance 
         >
           <TextInput
             multiline
+            onBlur={() => setIsInputFocused(false)}
             onChangeText={setInputText}
+            onFocus={() => setIsInputFocused(true)}
             placeholder="Type a message"
             ref={inputRef}
             style={styles.input}
