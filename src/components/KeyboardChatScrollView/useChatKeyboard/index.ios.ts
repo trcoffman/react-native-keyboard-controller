@@ -141,9 +141,12 @@ function useChatKeyboard(
           return;
         }
 
+        // Undo only the scroll displacement that was actually applied
+        // (not the full padding, which includes blank-absorbed portion)
+        const prevScrollEff = getScrollEffective(padding.value, blankAbsorbed);
         const relativeScroll = inverted
-          ? scroll.value + padding.value
-          : scroll.value - padding.value;
+          ? scroll.value + prevScrollEff
+          : scroll.value - prevScrollEff;
 
         padding.value = effective;
 
