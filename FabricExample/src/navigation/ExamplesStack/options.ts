@@ -94,4 +94,7 @@ export const options = {
   [ScreenNames.AI_LEGEND_LIST_CHAT]: {
     title: "AI LegendList Chat",
   },
+  [ScreenNames.BLANK_SPACE_ANDROID_GESTURE_BUG]: {
+    title: "Blank Space Android Gesture Bug",
+  },
 };

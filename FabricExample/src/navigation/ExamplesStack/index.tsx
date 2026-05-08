@@ -3,6 +3,7 @@ import React from "react";
 
 import { ScreenNames } from "../../constants/screenNames";
 import AILegendListChat from "../../screens/Examples/AILegendListChat";
+import BlankSpaceAndroidGestureBug from "../../screens/Examples/BlankSpaceAndroidGestureBug";
 import AwareScrollView from "../../screens/Examples/AwareScrollView";
 import AwareScrollViewStickyFooter from "../../screens/Examples/AwareScrollViewStickyFooter";
 import CloseScreen from "../../screens/Examples/Close";
@@ -62,6 +63,7 @@ export type ExamplesStackParamList = {
   [ScreenNames.KEYBOARD_EXTENDER]: undefined;
   [ScreenNames.CHAT_KIT]: undefined;
   [ScreenNames.AI_LEGEND_LIST_CHAT]: undefined;
+  [ScreenNames.BLANK_SPACE_ANDROID_GESTURE_BUG]: undefined;
 };
 
 const Stack = createStackNavigator<ExamplesStackParamList>();
@@ -207,6 +209,11 @@ const ExamplesStack = () => (
       component={AILegendListChat}
       name={ScreenNames.AI_LEGEND_LIST_CHAT}
       options={options[ScreenNames.AI_LEGEND_LIST_CHAT]}
+    />
+    <Stack.Screen
+      component={BlankSpaceAndroidGestureBug}
+      name={ScreenNames.BLANK_SPACE_ANDROID_GESTURE_BUG}
+      options={options[ScreenNames.BLANK_SPACE_ANDROID_GESTURE_BUG]}
     />
   </Stack.Navigator>
 );

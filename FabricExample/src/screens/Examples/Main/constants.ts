@@ -171,4 +171,10 @@ export const examples: Example[] = [
     info: ScreenNames.AI_LEGEND_LIST_CHAT,
     icons: "🤖 💬",
   },
+  {
+    title: "Blank Space Android Gesture Bug",
+    testID: "blank_space_android_gesture_bug",
+    info: ScreenNames.BLANK_SPACE_ANDROID_GESTURE_BUG,
+    icons: "🤖 💬",
+  },
 ];
