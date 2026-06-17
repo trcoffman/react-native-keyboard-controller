@@ -171,4 +171,10 @@ export const examples: Example[] = [
     info: ScreenNames.AI_LEGEND_LIST_CHAT,
     icons: "🤖 💬",
   },
+  {
+    title: "AI ScrollView Chat",
+    testID: "ai_scroll_view_chat",
+    info: ScreenNames.AI_SCROLL_VIEW_CHAT,
+    icons: "🤖 📜",
+  },
 ];

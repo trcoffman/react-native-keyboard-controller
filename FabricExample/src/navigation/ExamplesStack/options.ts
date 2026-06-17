@@ -94,4 +94,7 @@ export const options = {
   [ScreenNames.AI_LEGEND_LIST_CHAT]: {
     title: "AI LegendList Chat",
   },
+  [ScreenNames.AI_SCROLL_VIEW_CHAT]: {
+    title: "AI ScrollView Chat",
+  },
 };

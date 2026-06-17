@@ -1,23 +1,20 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Platform, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAwareLegendList,
+  useKeyboardChatComposerInset,
+} from "@legendapp/list/keyboard";
 import {
   KeyboardController,
   KeyboardGestureArea,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
-import Animated, { FadeIn, useSharedValue } from "react-native-reanimated";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { KeyboardChatLegendList } from "./KeyboardChatLegendList.tsx";
 import styles from "./styles";
 
-import type { LegendListRef } from "@legendapp/list";
+import type { LegendListRef } from "@legendapp/list/react-native";
 
 type Message = {
   id: string;
@@ -125,35 +122,20 @@ const AIChat = () => {
   const [inputText, setInputText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [liftBehavior, setLiftBehavior] = useState<LiftBehavior>("whenAtEnd");
-  const [anchorToTopIndex, setBlankSizeIndex] = useState<number | undefined>(
-    undefined,
-  );
+  // Index of the message that should be anchored to the top of the viewport
+  // after a user send. KeyboardAwareLegendList renders trailing blank space
+  // below this item so it can sit at the top when content underflows.
+  const [anchorIndex, setAnchorIndex] = useState<number | undefined>(undefined);
   const listRef = useRef<LegendListRef>(null);
   const inputRef = useRef<TextInput>(null);
   const composerRef = useRef<View>(null);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const insets = useSafeAreaInsets();
-  // have to set an initial value higher than it will actually end up,
-  // because reportContentInset doesn't work on android to ensure
-  // initialScrollAtEnd works with extraContentPadding
-  const composerHeight = useSharedValue(100);
 
-  useLayoutEffect(() => {
-    composerRef.current?.measure((_x, _y, _width, height) => {
-      composerHeight.value = height;
-      listRef.current?.reportContentInset({ bottom: height });
-    });
-  }, []);
-
-  const onComposerLayout = useCallback(
-    (event: { nativeEvent: { layout: { height: number } } }) => {
-      const { height } = event.nativeEvent.layout;
-
-      composerHeight.value = height;
-      listRef.current?.reportContentInset({ bottom: height });
-    },
-    [],
-  );
+  // Measures the composer and reports its height to the list as the end content
+  // inset, replacing the manual composerHeight / reportContentInset wiring.
+  const { contentInsetEndAdjustment, onComposerLayout } =
+    useKeyboardChatComposerInset(listRef, composerRef, 100);
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -170,7 +152,7 @@ const AIChat = () => {
   }, []);
 
   const doSendMessage = (text: string, rawInput: string) => {
-    setBlankSizeIndex(messages.length);
+    setAnchorIndex(messages.length);
 
     setMessages((prevMessages) => [
       ...prevMessages,
@@ -267,18 +249,20 @@ const AIChat = () => {
         offset={60}
         style={styles.container}
       >
-        <KeyboardChatLegendList
+        <KeyboardAwareLegendList
           ref={listRef}
           initialScrollAtEnd
           maintainVisibleContentPosition
-          anchorToTopIndex={anchorToTopIndex}
+          anchoredEndSpace={
+            anchorIndex === undefined ? undefined : { anchorIndex }
+          }
           contentContainerStyle={styles.contentContainer}
+          contentInsetEndAdjustment={contentInsetEndAdjustment}
           data={messages}
-          extraContentPadding={composerHeight}
           keyboardLiftBehavior={liftBehavior}
+          keyboardOffset={insets.bottom}
           keyExtractor={(_item, index) => `item-${index}`}
           maintainScrollAtEnd={Platform.OS === "web"}
-          offset={insets.bottom}
           renderItem={({ item }) => (
             <View>
               {item.sender === "user" ? (

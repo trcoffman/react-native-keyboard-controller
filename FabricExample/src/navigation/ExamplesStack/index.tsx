@@ -3,6 +3,7 @@ import React from "react";
 
 import { ScreenNames } from "../../constants/screenNames";
 import AILegendListChat from "../../screens/Examples/AILegendListChat";
+import AIScrollViewChat from "../../screens/Examples/AIScrollViewChat";
 import AwareScrollView from "../../screens/Examples/AwareScrollView";
 import AwareScrollViewStickyFooter from "../../screens/Examples/AwareScrollViewStickyFooter";
 import CloseScreen from "../../screens/Examples/Close";
@@ -62,6 +63,7 @@ export type ExamplesStackParamList = {
   [ScreenNames.KEYBOARD_EXTENDER]: undefined;
   [ScreenNames.CHAT_KIT]: undefined;
   [ScreenNames.AI_LEGEND_LIST_CHAT]: undefined;
+  [ScreenNames.AI_SCROLL_VIEW_CHAT]: undefined;
 };
 
 const Stack = createStackNavigator<ExamplesStackParamList>();
@@ -207,6 +209,11 @@ const ExamplesStack = () => (
       component={AILegendListChat}
       name={ScreenNames.AI_LEGEND_LIST_CHAT}
       options={options[ScreenNames.AI_LEGEND_LIST_CHAT]}
+    />
+    <Stack.Screen
+      component={AIScrollViewChat}
+      name={ScreenNames.AI_SCROLL_VIEW_CHAT}
+      options={options[ScreenNames.AI_SCROLL_VIEW_CHAT]}
     />
   </Stack.Navigator>
 );

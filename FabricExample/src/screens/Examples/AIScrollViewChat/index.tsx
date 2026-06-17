@@ -1,26 +1,20 @@
-import {
+import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
 import { Button, Platform, Pressable, Text, TextInput, View } from "react-native";
 import {
-  KeyboardAwareLegendList,
-  useKeyboardChatComposerInset,
-} from "@legendapp/list/keyboard";
-import {
   KeyboardController,
+  KeyboardChatScrollView,
   KeyboardGestureArea,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import styles from "./styles";
-
-import type { LegendListRef } from "@legendapp/list/react-native";
 
 type Message = {
   id: string;
@@ -146,19 +140,55 @@ const AIChat = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [liftBehavior, setLiftBehavior] = useState<LiftBehavior>("whenAtEnd");
   // Index of the message that should be anchored to the top of the viewport
-  // after a user send. KeyboardAwareLegendList renders trailing blank space
-  // below this item so it can sit at the top when content underflows.
-  const [anchorIndex, setAnchorIndex] = useState<number | undefined>(undefined);
-  const listRef = useRef<LegendListRef>(null);
+  // after a user send — same semantics as anchorToTopIndex in the LegendList example.
+  const [anchorToTopIndex, setAnchorToTopIndex] = useState<number | undefined>(
+    undefined,
+  );
+  const scrollRef = useRef<React.ComponentRef<typeof KeyboardChatScrollView>>(null);
   const inputRef = useRef<TextInput>(null);
   const composerRef = useRef<View>(null);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const insets = useSafeAreaInsets();
 
-  // Measures the composer and reports its height to the list as the end content
-  // inset, replacing the manual composerHeight / reportContentInset wiring.
-  const { contentInsetEndAdjustment, onComposerLayout } =
-    useKeyboardChatComposerInset(listRef, composerRef, 100);
+  // Heights measured via onLayout for each message, keyed by message id.
+  const messageSizes = useRef<Map<string, number>>(new Map());
+  // Viewport height of the scroll view itself.
+  const scrollViewHeight = useRef<number>(0);
+
+  const composerHeight = useSharedValue(100);
+  const blankSpace = useSharedValue(0);
+
+  const onComposerLayout = useCallback(
+    (event: { nativeEvent: { layout: { height: number } } }) => {
+      composerHeight.value = event.nativeEvent.layout.height;
+    },
+    [],
+  );
+
+  // Recompute blankSpace whenever sizes or the anchor index change.
+  // blankSpace = max(0, scrollViewHeight - sum of heights from anchorToTopIndex onwards)
+  const recalculateBlankSpace = useCallback(
+    (msgs: Message[], anchor: number | undefined) => {
+      if (anchor === undefined || anchor < 0) {
+        blankSpace.value = 0;
+        return;
+      }
+
+      let contentBelowAnchor = 0;
+
+      for (let i = anchor; i < msgs.length; i++) {
+        const h = messageSizes.current.get(msgs[i].id) ?? 0;
+
+        contentBelowAnchor += h;
+      }
+
+      blankSpace.value = Math.max(
+        0,
+        scrollViewHeight.current - contentBelowAnchor,
+      );
+    },
+    [],
+  );
 
   const schedule = useCallback((fn: () => void, ms: number) => {
     const id = setTimeout(fn, ms);
@@ -217,31 +247,32 @@ const AIChat = () => {
     setOverrides(new Map());
   }, []);
 
-  // LegendList recycles rows and only re-renders them when `data` or `extraData`
-  // changes. Expand/collapse lives in `defaultExpanded`/`overrides` (not in the
-  // message data), so feed them through `extraData` to force affected rows to
-  // re-render with the new expanded state.
-  const expandState = useMemo(
-    () => ({ defaultExpanded, overrides }),
-    [defaultExpanded, overrides],
-  );
-
   const doSendMessage = (text: string, rawInput: string) => {
-    setAnchorIndex(messages.length);
+    const newAnchor = messages.length;
 
-    setMessages((prevMessages) => [
-      ...prevMessages,
-      {
-        id: createId(),
-        isNew: true,
-        sender: "user",
-        text: text,
-        timeStamp: Date.now(),
-      },
-    ]);
+    setAnchorToTopIndex(newAnchor);
+
+    setMessages((prevMessages) => {
+      const next = [
+        ...prevMessages,
+        {
+          id: createId(),
+          isNew: true,
+          sender: "user" as const,
+          text,
+          timeStamp: Date.now(),
+        },
+      ];
+
+      // Recompute with the new message list and anchor synchronously so
+      // blankSpace is set before the next render.
+      recalculateBlankSpace(next, newAnchor);
+
+      return next;
+    });
 
     schedule(() => {
-      listRef.current?.scrollToEnd({ animated: true });
+      scrollRef.current?.scrollToEnd({ animated: true });
       schedule(() => simulateAIResponse(text, rawInput), 800);
     }, 200);
   };
@@ -303,6 +334,11 @@ const AIChat = () => {
     return clearAllTimers;
   }, [clearAllTimers]);
 
+  // Re-run blankSpace calculation whenever messages or anchor changes.
+  useEffect(() => {
+    recalculateBlankSpace(messages, anchorToTopIndex);
+  }, [messages, anchorToTopIndex, recalculateBlankSpace]);
+
   return (
     <View style={styles.container}>
       <View style={styles.behaviorBar}>
@@ -332,23 +368,40 @@ const AIChat = () => {
         offset={60}
         style={styles.container}
       >
-        <KeyboardAwareLegendList
-          ref={listRef}
-          initialScrollAtEnd
-          maintainVisibleContentPosition
-          anchoredEndSpace={
-            anchorIndex === undefined ? undefined : { anchorIndex }
-          }
+        <KeyboardChatScrollView
+          ref={scrollRef}
+          applyWorkaroundForContentInsetHitTestBug
+          blankSpace={blankSpace}
           contentContainerStyle={styles.contentContainer}
-          contentInsetEndAdjustment={contentInsetEndAdjustment}
-          data={messages}
-          extraData={expandState}
+          extraContentPadding={composerHeight}
+          keyboardDismissMode="interactive"
           keyboardLiftBehavior={liftBehavior}
-          keyboardOffset={insets.bottom}
-          keyExtractor={(_item, index) => `item-${index}`}
-          maintainScrollAtEnd={Platform.OS === "web"}
-          renderItem={({ item }) => (
-            <View>
+          maintainVisibleContentPosition={
+            Platform.OS === "android"
+              ? undefined
+              : { minIndexForVisible: 0 }
+          }
+          offset={insets.bottom}
+          scrollIndicatorInsets={{ bottom: -insets.bottom }}
+          style={styles.list}
+          onLayout={(e) => {
+            scrollViewHeight.current = e.nativeEvent.layout.height;
+            recalculateBlankSpace(messages, anchorToTopIndex);
+          }}
+        >
+          {messages.map((item) => (
+            <View
+              key={item.id}
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                const prev = messageSizes.current.get(item.id) ?? 0;
+
+                if (h !== prev) {
+                  messageSizes.current.set(item.id, h);
+                  recalculateBlankSpace(messages, anchorToTopIndex);
+                }
+              }}
+            >
               {item.sender === "user" ? (
                 <Animated.View
                   entering={item.isNew ? FadeIn.duration(1000) : undefined}
@@ -377,10 +430,8 @@ const AIChat = () => {
                 />
               )}
             </View>
-          )}
-          scrollIndicatorInsets={{ bottom: -insets.bottom }}
-          style={styles.list}
-        />
+          ))}
+        </KeyboardChatScrollView>
       </KeyboardGestureArea>
       <KeyboardStickyView
         offset={{ closed: 0, opened: insets.bottom }}
