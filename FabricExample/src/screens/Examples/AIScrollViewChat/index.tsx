@@ -1,13 +1,15 @@
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import { Button, Platform, Pressable, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  KeyboardController,
+  Button,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import {
   KeyboardChatScrollView,
+  KeyboardController,
   KeyboardGestureArea,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
@@ -144,7 +146,8 @@ const AIChat = () => {
   const [anchorToTopIndex, setAnchorToTopIndex] = useState<number | undefined>(
     undefined,
   );
-  const scrollRef = useRef<React.ComponentRef<typeof KeyboardChatScrollView>>(null);
+  const scrollRef =
+    useRef<React.ComponentRef<typeof KeyboardChatScrollView>>(null);
   const inputRef = useRef<TextInput>(null);
   const composerRef = useRef<View>(null);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -171,6 +174,7 @@ const AIChat = () => {
     (msgs: Message[], anchor: number | undefined) => {
       if (anchor === undefined || anchor < 0) {
         blankSpace.value = 0;
+
         return;
       }
 
@@ -204,26 +208,60 @@ const AIChat = () => {
     setIsStreaming(false);
   }, []);
 
-  // Clear a message's expand/collapse override so it follows the current
-  // default again.
-  const resetOverride = useCallback((id: string) => {
-    setOverrides((prev) => {
-      if (!prev.has(id)) {
-        return prev;
-      }
-
-      const next = new Map(prev);
-
-      next.delete(id);
-
-      return next;
-    });
+  // When a message is about to COLLAPSE (expanded → collapsed) the content below
+  // the anchor shrinks. Until `recalculateBlankSpace` grows blankSpace, iOS
+  // clamps the scroll offset to the smaller content, shifting the anchor down.
+  // Reserve a full viewport of blankSpace *now*, before the numberOfLines change
+  // commits, so the inset is already large when the content shrinks → iOS never
+  // clamps → the anchor stays put. recalculateBlankSpace then settles it to the
+  // precise value once the collapsed row is measured. Must be called
+  // synchronously before the state update that collapses the row (both manual
+  // taps and the 5s auto-recollapse).
+  const reserveForCollapse = useCallback(() => {
+    blankSpace.value = scrollViewHeight.current;
   }, []);
+
+  // Clear a message's expand/collapse override so it follows the current
+  // default again. When the default is contracted, clearing an expanded
+  // override re-collapses the row, so reserve the inset first (same flash fix).
+  const resetOverride = useCallback(
+    (id: string) => {
+      setOverrides((prev) => {
+        if (!prev.has(id)) {
+          return prev;
+        }
+
+        // Read the live state from `prev` (not a captured closure — this runs
+        // from a 5s timer where captured `overrides` would be stale): clearing
+        // an expanded override while the default is contracted re-collapses the
+        // row, so reserve the inset first (same flash fix as toggleMessage).
+        const wasExpanded = prev.get(id) ?? defaultExpanded;
+
+        if (wasExpanded && !defaultExpanded) {
+          reserveForCollapse();
+        }
+
+        const next = new Map(prev);
+
+        next.delete(id);
+
+        return next;
+      });
+    },
+    [defaultExpanded, reserveForCollapse],
+  );
 
   const toggleMessage = useCallback(
     (id: string) => {
+      const isExpanded = overrides.has(id)
+        ? overrides.get(id)!
+        : defaultExpanded;
+
+      if (isExpanded) {
+        reserveForCollapse();
+      }
+
       setOverrides((prev) => {
-        const isExpanded = prev.has(id) ? prev.get(id)! : defaultExpanded;
         const next = new Map(prev);
 
         next.set(id, !isExpanded);
@@ -237,7 +275,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded, resetOverride, schedule],
+    [defaultExpanded, overrides, reserveForCollapse, resetOverride, schedule],
   );
 
   const toggleDefaultMode = useCallback(() => {
@@ -377,9 +415,7 @@ const AIChat = () => {
           keyboardDismissMode="interactive"
           keyboardLiftBehavior={liftBehavior}
           maintainVisibleContentPosition={
-            Platform.OS === "android"
-              ? undefined
-              : { minIndexForVisible: 0 }
+            Platform.OS === "android" ? undefined : { minIndexForVisible: 0 }
           }
           offset={insets.bottom}
           scrollIndicatorInsets={{ bottom: -insets.bottom }}
