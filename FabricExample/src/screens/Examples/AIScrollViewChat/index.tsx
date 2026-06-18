@@ -296,10 +296,22 @@ const AIChat = () => {
         contentBelowAnchor += h;
       }
 
-      blankSpace.value = Math.max(
-        0,
-        scrollViewHeight.current - contentBelowAnchor,
-      );
+      const nextBlankSpace = scrollViewHeight.current - contentBelowAnchor;
+
+      // The anchor + blankSpace only exist to hold the latest user message at
+      // the top while the AI reply streams in at an unknown height. Once the
+      // content below the anchor fills the viewport on its own, the scaffolding
+      // has done its job: release the anchor so blankSpace settles to 0 and
+      // never has to shrink back (which is what caused the collapse/stream
+      // scroll glitches). Real content now keeps the message in place.
+      if (nextBlankSpace <= 0) {
+        blankSpace.value = 0;
+        setAnchorToTopIndex(undefined);
+
+        return;
+      }
+
+      blankSpace.value = nextBlankSpace;
     },
     [],
   );
@@ -352,7 +364,12 @@ const AIChat = () => {
           skipCollapseAnimationIds.current.add(id);
         }
 
-        if (wasExpanded && !defaultExpanded && isLastMessage(id)) {
+        if (
+          wasExpanded &&
+          !defaultExpanded &&
+          isLastMessage(id) &&
+          blankSpace.value > 0
+        ) {
           scrollRef.current?.reserveBlankSpace();
         }
 
@@ -372,12 +389,7 @@ const AIChat = () => {
         ? overrides.get(id)!
         : defaultExpanded;
 
-      // Collapsing the last message shrinks the content below the anchor.
-      // Reserve a generous inset *before* the shrink animation starts so the
-      // ScrollView doesn't clamp the scroll offset (which would shift the
-      // anchor) before recalculateBlankSpace settles blankSpace to its new
-      // value. Earlier messages aren't anchored, so they skip this.
-      if (isExpanded && isLastMessage(id)) {
+      if (isExpanded && isLastMessage(id) && blankSpace.value > 0) {
         scrollRef.current?.reserveBlankSpace();
       }
 
@@ -597,7 +609,9 @@ const AIChat = () => {
                     // Only the last message reserves blankSpace, so only it
                     // needs to release. Earlier messages are a no-op.
                     if (isLastMessage(item.id)) {
-                      scrollRef.current?.releaseBlankSpace();
+                      requestAnimationFrame(() => {
+                        scrollRef.current?.releaseBlankSpace();
+                      });
                     }
                   }}
                   onToggle={() => toggleMessage(item.id)}
