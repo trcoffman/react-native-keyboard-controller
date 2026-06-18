@@ -19,17 +19,27 @@ export type KeyboardChatScrollViewHandle = Reanimated.ScrollView & {
    * event handler that triggers the shrink.
    *
    * Without it, when content below the anchored item shrinks the native
-   * `ScrollView` clamps the scroll offset to the now-smaller content for a frame
-   * — before `blankSpace` grows to compensate — and the anchored item visibly
-   * shifts. Reserving inset up front keeps the offset valid so nothing moves.
-   * The reserve is transient: it is released automatically as soon as
-   * `blankSpace` next changes (i.e. once you have recomputed it for the new
-   * content size).
+   * `ScrollView` clamps the scroll offset to the now-smaller content — before
+   * `blankSpace` grows to compensate — and the anchored item visibly shifts.
+   * Reserving inset up front keeps the offset valid so nothing moves.
+   *
+   * The reserve is held until you call {@link releaseBlankSpace}, so it spans an
+   * animated shrink (where the content keeps shrinking over several frames), not
+   * just a single instantaneous collapse. Always pair it with a
+   * `releaseBlankSpace()` once the shrink — and any animation — has completed
+   * and your own `blankSpace` reflects the new content size.
    *
    * @param value - Inset to reserve, in pixels. Defaults to one viewport
    * height, which is the maximum the inset is ever clamped to internally.
    */
   reserveBlankSpace: (value?: number) => void;
+  /**
+   * Releases a reserve previously taken with {@link reserveBlankSpace}. Call it
+   * once the content shrink (and any collapse animation) has finished and your
+   * own `blankSpace` reflects the new content size — e.g. from the animation's
+   * completion callback, or right after an instantaneous collapse settles.
+   */
+  releaseBlankSpace: () => void;
 };
 
 export type KeyboardChatScrollViewProps = {

@@ -15,6 +15,7 @@ import {
 } from "react-native-keyboard-controller";
 import Animated, {
   FadeIn,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -63,16 +64,26 @@ const AIResponse = ({
   timeStamp,
   expanded,
   onToggle,
+  onCollapseAnimationEnd,
 }: {
   text: string;
   isPlaceholder: boolean;
   timeStamp: number;
   expanded: boolean;
   onToggle: () => void;
+  onCollapseAnimationEnd: () => void;
 }) => {
   const fullHeight = useSharedValue<number | null>(null);
   const animatedHeight = useSharedValue<number>(COLLAPSED_HEIGHT);
   const isFirstLayout = useRef(true);
+
+  // Keep the latest callback in a ref so the height-animation effect below does
+  // NOT depend on it. The parent passes a fresh inline arrow every render (and
+  // re-renders on every streaming word), so depending on it directly would
+  // re-run the effect — and re-fire the timing animation — on each word.
+  const onCollapseAnimationEndRef = useRef(onCollapseAnimationEnd);
+
+  onCollapseAnimationEndRef.current = onCollapseAnimationEnd;
 
   const animatedStyle = useAnimatedStyle(() => {
     if (animatedHeight.value === 0) {
@@ -90,10 +101,27 @@ const AIResponse = ({
     const target = expanded ? fullHeight.value : COLLAPSED_HEIGHT;
 
     if (isFirstLayout.current) {
+      // eslint-disable-next-line react-compiler/react-compiler
       animatedHeight.value = target;
       isFirstLayout.current = false;
+    } else if (expanded) {
+      animatedHeight.value = withTiming(target, {
+        duration: ANIMATION_DURATION,
+      });
     } else {
-      animatedHeight.value = withTiming(target, { duration: ANIMATION_DURATION });
+      // Collapsing: the content shrinks over ANIMATION_DURATION. The parent has
+      // reserved blankSpace to keep the anchor pinned across the whole shrink;
+      // release it only once the animation finishes (not when blankSpace first
+      // changes mid-animation), so the reserved inset spans every frame.
+      animatedHeight.value = withTiming(
+        target,
+        { duration: ANIMATION_DURATION },
+        (finished) => {
+          if (finished) {
+            runOnJS(onCollapseAnimationEndRef.current)();
+          }
+        },
+      );
     }
   }, [expanded, fullHeight, animatedHeight]);
 
@@ -139,7 +167,15 @@ const AIResponse = ({
           }
 
           fullHeight.value = measured;
-          const target = expanded ? measured : Math.min(measured, COLLAPSED_HEIGHT);
+
+          // While expanded (e.g. streaming in word-by-word) the height must only
+          // ever GROW — a transient smaller measurement must never shrink the
+          // view, or the content below shifts up. Clamp the expanded target to
+          // at least the current height. Only an explicit collapse
+          // (`!expanded`, handled in the effect below) may shrink it.
+          const target = expanded
+            ? Math.max(measured, animatedHeight.value)
+            : Math.min(measured, COLLAPSED_HEIGHT);
 
           animatedHeight.value = isFirstLayout.current
             ? target
@@ -513,6 +549,9 @@ const AIChat = () => {
                   isPlaceholder={!!item.isPlaceholder}
                   text={item.text}
                   timeStamp={item.timeStamp}
+                  onCollapseAnimationEnd={() =>
+                    scrollRef.current?.releaseBlankSpace()
+                  }
                   onToggle={() => toggleMessage(item.id)}
                 />
               )}

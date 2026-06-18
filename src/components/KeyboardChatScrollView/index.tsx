@@ -7,7 +7,6 @@ import React, {
 import { StyleSheet } from "react-native";
 import {
   makeMutable,
-  useAnimatedReaction,
   useAnimatedRef,
   useAnimatedStyle,
   useDerivedValue,
@@ -106,23 +105,6 @@ const KeyboardChatScrollView = forwardRef<
     // settled it to the precise value). See `reserveBlankSpace` below.
     const reserve = useSharedValue(0);
 
-    // Drop the reserve once `blankSpace` changes — by then the consumer has
-    // recomputed it to its settled post-shrink value, so the precise inset
-    // takes over and the generous reserve is no longer needed.
-    useAnimatedReaction(
-      () => blankSpace.value,
-      (current, previous) => {
-        if (previous === null) {
-          return;
-        }
-        if (reserve.value > 0 && current !== previous) {
-          // eslint-disable-next-line react-compiler/react-compiler
-          reserve.value = 0;
-        }
-      },
-      [],
-    );
-
     // intentionally clamp `blankSpace` at one ScrollView viewport. The Android
     // `ClippingScrollView` workaround temporarily substitutes padding/range
     // during touch handling, and oversized blank ranges can de-sync during fast
@@ -164,11 +146,11 @@ const KeyboardChatScrollView = forwardRef<
       [onContentSizeChangeInternal, onContentSizeChangeProp],
     );
 
-    // Expose `reserveBlankSpace` alongside the underlying ScrollView's own
-    // methods (e.g. `scrollTo`, `scrollToEnd`). The ScrollView methods are
-    // delegated lazily to the live instance — `scrollViewRef.current` is not
-    // populated until after mount, so we must read it at call time, not when
-    // the handle is created.
+    // Expose `reserveBlankSpace` / `releaseBlankSpace` alongside the underlying
+    // ScrollView's own methods (e.g. `scrollTo`, `scrollToEnd`). The ScrollView
+    // methods are delegated lazily to the live instance — `scrollViewRef.current`
+    // is not populated until after mount, so we must read it at call time, not
+    // when the handle is created.
     useImperativeHandle(
       ref,
       () =>
@@ -178,10 +160,21 @@ const KeyboardChatScrollView = forwardRef<
               return (value?: number) => {
                 // Reserve a generous bottom inset *now* (synchronously, before
                 // the caller's content-shrink commit) so the native ScrollView
-                // never clamps the offset in the gap before `blankSpace`
-                // settles. Defaults to one viewport — the most the inset is
-                // ever clamped to anyway.
+                // never clamps the offset while the content shrinks. The reserve
+                // is held until `releaseBlankSpace()` is called — so it spans an
+                // animated shrink, not just a single frame. Defaults to one
+                // viewport — the most the inset is ever clamped to anyway.
+                // eslint-disable-next-line react-compiler/react-compiler
                 reserve.value = value ?? layout.value.height;
+              };
+            }
+
+            if (prop === "releaseBlankSpace") {
+              return () => {
+                // Release the reserve once the shrink (and any animation) has
+                // finished and the consumer's own `blankSpace` reflects the new
+                // content size. The precise inset then takes over.
+                reserve.value = 0;
               };
             }
 
