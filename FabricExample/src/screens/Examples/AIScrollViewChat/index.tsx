@@ -13,7 +13,12 @@ import {
   KeyboardGestureArea,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
-import Animated, { FadeIn, useSharedValue } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import styles from "./styles";
@@ -47,6 +52,11 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ];
 
+const COLLAPSED_LINE_COUNT = 6;
+const LINE_HEIGHT = 22;
+const COLLAPSED_HEIGHT = COLLAPSED_LINE_COUNT * LINE_HEIGHT;
+const ANIMATION_DURATION = 250;
+
 const AIResponse = ({
   text,
   isPlaceholder,
@@ -60,6 +70,33 @@ const AIResponse = ({
   expanded: boolean;
   onToggle: () => void;
 }) => {
+  const fullHeight = useSharedValue<number | null>(null);
+  const animatedHeight = useSharedValue<number>(COLLAPSED_HEIGHT);
+  const isFirstLayout = useRef(true);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    if (animatedHeight.value === 0) {
+      return {};
+    }
+
+    return { height: animatedHeight.value, overflow: "hidden" };
+  });
+
+  useEffect(() => {
+    if (fullHeight.value === null) {
+      return;
+    }
+
+    const target = expanded ? fullHeight.value : COLLAPSED_HEIGHT;
+
+    if (isFirstLayout.current) {
+      animatedHeight.value = target;
+      isFirstLayout.current = false;
+    } else {
+      animatedHeight.value = withTiming(target, { duration: ANIMATION_DURATION });
+    }
+  }, [expanded, fullHeight, animatedHeight]);
+
   if (isPlaceholder) {
     return (
       <View
@@ -90,9 +127,31 @@ const AIResponse = ({
       ]}
       onPress={onToggle}
     >
-      <Text numberOfLines={expanded ? undefined : 6} style={styles.messageText}>
-        {text}
-      </Text>
+      {/* Invisible full-text view used only to measure the unconstrained height */}
+      <View
+        pointerEvents="none"
+        style={styles.measureLayer}
+        onLayout={(e) => {
+          const measured = e.nativeEvent.layout.height;
+
+          if (measured === fullHeight.value) {
+            return;
+          }
+
+          fullHeight.value = measured;
+          const target = expanded ? measured : Math.min(measured, COLLAPSED_HEIGHT);
+
+          animatedHeight.value = isFirstLayout.current
+            ? target
+            : withTiming(target, { duration: ANIMATION_DURATION });
+          isFirstLayout.current = false;
+        }}
+      >
+        <Text style={styles.messageText}>{text}</Text>
+      </View>
+      <Animated.View style={animatedStyle}>
+        <Text style={styles.messageText}>{text}</Text>
+      </Animated.View>
       <View style={[styles.timeStamp, styles.systemStyle]}>
         <Text style={styles.timeStampText}>
           {new Date(timeStamp).toLocaleTimeString()}

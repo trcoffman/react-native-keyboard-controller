@@ -113,4 +113,11 @@ export default StyleSheet.create({
     fontSize: 13,
     marginTop: 6,
   },
+  measureLayer: {
+    opacity: 0,
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 16,
+  },
 });
