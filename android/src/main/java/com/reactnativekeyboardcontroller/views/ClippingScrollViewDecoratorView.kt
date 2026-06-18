@@ -97,6 +97,24 @@ class ClippingScrollViewDecoratorView(
     }
 
     appliedTopInsetPx = newTopInsetPx
+
+    // When the bottom padding shrinks (e.g. a transient blankSpace reserve is
+    // released after content collapses) the scroll range shrinks too. Unlike
+    // iOS, Android does not re-clamp `scrollY` into the new range until the next
+    // touch — leaving the content stranded in the now-empty padding area until
+    // the user scrolls. Clamp it back into range ourselves. Posted to the next
+    // frame so the padding change has been applied to the scroll metrics.
+    scrollView.post {
+      val maxScrollY =
+        max(
+          0,
+          contentView.height + scrollView.paddingBottom + scrollView.paddingTop - scrollView.height,
+        )
+
+      if (scrollView.scrollY > maxScrollY) {
+        scrollView.scrollTo(scrollView.scrollX, maxScrollY)
+      }
+    }
   }
 
   private fun shouldUsePaddingScrollWorkaround(
