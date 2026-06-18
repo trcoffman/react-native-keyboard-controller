@@ -14,4 +14,7 @@ export type {
   KeyboardAwareScrollViewRef,
 } from "./KeyboardAwareScrollView/types";
 export type { KeyboardToolbarProps } from "./KeyboardToolbar";
-export type { KeyboardChatScrollViewProps } from "./KeyboardChatScrollView/types";
+export type {
+  KeyboardChatScrollViewHandle,
+  KeyboardChatScrollViewProps,
+} from "./KeyboardChatScrollView/types";

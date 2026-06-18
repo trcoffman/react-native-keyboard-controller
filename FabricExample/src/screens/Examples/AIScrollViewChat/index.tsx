@@ -208,22 +208,10 @@ const AIChat = () => {
     setIsStreaming(false);
   }, []);
 
-  // When a message is about to COLLAPSE (expanded → collapsed) the content below
-  // the anchor shrinks. Until `recalculateBlankSpace` grows blankSpace, iOS
-  // clamps the scroll offset to the smaller content, shifting the anchor down.
-  // Reserve a full viewport of blankSpace *now*, before the numberOfLines change
-  // commits, so the inset is already large when the content shrinks → iOS never
-  // clamps → the anchor stays put. recalculateBlankSpace then settles it to the
-  // precise value once the collapsed row is measured. Must be called
-  // synchronously before the state update that collapses the row (both manual
-  // taps and the 5s auto-recollapse).
-  const reserveForCollapse = useCallback(() => {
-    blankSpace.value = scrollViewHeight.current;
-  }, []);
-
   // Clear a message's expand/collapse override so it follows the current
   // default again. When the default is contracted, clearing an expanded
-  // override re-collapses the row, so reserve the inset first (same flash fix).
+  // override re-collapses the row, so reserve the inset first (see the
+  // `reserveBlankSpace` call in `toggleMessage` for why).
   const resetOverride = useCallback(
     (id: string) => {
       setOverrides((prev) => {
@@ -234,11 +222,11 @@ const AIChat = () => {
         // Read the live state from `prev` (not a captured closure — this runs
         // from a 5s timer where captured `overrides` would be stale): clearing
         // an expanded override while the default is contracted re-collapses the
-        // row, so reserve the inset first (same flash fix as toggleMessage).
+        // row, so reserve the inset before it shrinks.
         const wasExpanded = prev.get(id) ?? defaultExpanded;
 
         if (wasExpanded && !defaultExpanded) {
-          reserveForCollapse();
+          scrollRef.current?.reserveBlankSpace();
         }
 
         const next = new Map(prev);
@@ -248,7 +236,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded, reserveForCollapse],
+    [defaultExpanded],
   );
 
   const toggleMessage = useCallback(
@@ -257,8 +245,12 @@ const AIChat = () => {
         ? overrides.get(id)!
         : defaultExpanded;
 
+      // Collapsing shrinks the content below the anchor. Reserve a generous
+      // inset *before* the numberOfLines change commits so the ScrollView
+      // doesn't clamp the scroll offset (which would shift the anchor) before
+      // recalculateBlankSpace settles blankSpace to its new value.
       if (isExpanded) {
-        reserveForCollapse();
+        scrollRef.current?.reserveBlankSpace();
       }
 
       setOverrides((prev) => {
@@ -275,7 +267,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded, overrides, reserveForCollapse, resetOverride, schedule],
+    [defaultExpanded, overrides, resetOverride, schedule],
   );
 
   const toggleDefaultMode = useCallback(() => {

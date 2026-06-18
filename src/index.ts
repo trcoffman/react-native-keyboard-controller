@@ -17,6 +17,7 @@ export {
   DefaultKeyboardToolbarTheme,
 } from "./components";
 export type {
+  KeyboardChatScrollViewHandle,
   KeyboardChatScrollViewProps,
   KeyboardAvoidingViewProps,
   KeyboardStickyViewProps,

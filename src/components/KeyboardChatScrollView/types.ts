@@ -4,7 +4,33 @@ import type {
 } from "../ScrollViewWithBottomPadding";
 import type { KeyboardLiftBehavior } from "./useChatKeyboard/types";
 import type { ScrollViewProps } from "react-native";
+import type Reanimated from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
+
+/**
+ * Imperative handle exposed via `ref` on `KeyboardChatScrollView`. Extends the
+ * underlying `ScrollView` instance (so `scrollTo`, `scrollToEnd`, etc. remain
+ * available) with chat-specific imperative methods.
+ */
+export type KeyboardChatScrollViewHandle = Reanimated.ScrollView & {
+  /**
+   * Reserves a generous bottom inset *immediately*, before content shrinks
+   * (e.g. collapsing an expanded message). Call this synchronously in the same
+   * event handler that triggers the shrink.
+   *
+   * Without it, when content below the anchored item shrinks the native
+   * `ScrollView` clamps the scroll offset to the now-smaller content for a frame
+   * — before `blankSpace` grows to compensate — and the anchored item visibly
+   * shifts. Reserving inset up front keeps the offset valid so nothing moves.
+   * The reserve is transient: it is released automatically as soon as
+   * `blankSpace` next changes (i.e. once you have recomputed it for the new
+   * content size).
+   *
+   * @param value - Inset to reserve, in pixels. Defaults to one viewport
+   * height, which is the maximum the inset is ever clamped to internally.
+   */
+  reserveBlankSpace: (value?: number) => void;
+};
 
 export type KeyboardChatScrollViewProps = {
   /** Custom component for `ScrollView`. Default is `ScrollView`. */
