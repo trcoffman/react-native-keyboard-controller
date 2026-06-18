@@ -65,6 +65,7 @@ const AIResponse = ({
   expanded,
   onToggle,
   onCollapseAnimationEnd,
+  shouldAnimateCollapse,
 }: {
   text: string;
   isPlaceholder: boolean;
@@ -72,18 +73,24 @@ const AIResponse = ({
   expanded: boolean;
   onToggle: () => void;
   onCollapseAnimationEnd: () => void;
+  // Returns whether the *next* collapse of this row should animate. Reads (and
+  // consumes) a one-shot skip flag — collapses driven by the off-screen 5s
+  // timer are instant.
+  shouldAnimateCollapse: () => boolean;
 }) => {
   const fullHeight = useSharedValue<number | null>(null);
   const animatedHeight = useSharedValue<number>(COLLAPSED_HEIGHT);
   const isFirstLayout = useRef(true);
 
-  // Keep the latest callback in a ref so the height-animation effect below does
-  // NOT depend on it. The parent passes a fresh inline arrow every render (and
-  // re-renders on every streaming word), so depending on it directly would
+  // Keep the latest callbacks in refs so the height-animation effect below does
+  // NOT depend on them. The parent passes fresh inline arrows every render (and
+  // re-renders on every streaming word), so depending on them directly would
   // re-run the effect — and re-fire the timing animation — on each word.
   const onCollapseAnimationEndRef = useRef(onCollapseAnimationEnd);
+  const shouldAnimateCollapseRef = useRef(shouldAnimateCollapse);
 
   onCollapseAnimationEndRef.current = onCollapseAnimationEnd;
+  shouldAnimateCollapseRef.current = shouldAnimateCollapse;
 
   const animatedStyle = useAnimatedStyle(() => {
     if (animatedHeight.value === 0) {
@@ -108,6 +115,11 @@ const AIResponse = ({
       animatedHeight.value = withTiming(target, {
         duration: ANIMATION_DURATION,
       });
+    } else if (!shouldAnimateCollapseRef.current()) {
+      // Off-screen (timer-driven) collapse: snap instantly, then run the
+      // completion callback so any reserved blankSpace is released.
+      animatedHeight.value = target;
+      onCollapseAnimationEndRef.current();
     } else {
       // Collapsing: the content shrinks over ANIMATION_DURATION. The parent has
       // reserved blankSpace to keep the anchor pinned across the whole shrink;
@@ -252,6 +264,9 @@ const AIChat = () => {
   const messageSizes = useRef<Map<string, number>>(new Map());
   // Viewport height of the scroll view itself.
   const scrollViewHeight = useRef<number>(0);
+  // Message ids whose next collapse should be instant (no animation) because it
+  // was triggered by the 5s timer while the row may be off screen.
+  const skipCollapseAnimationIds = useRef<Set<string>>(new Set());
 
   const composerHeight = useSharedValue(100);
   const blankSpace = useSharedValue(0);
@@ -307,6 +322,15 @@ const AIChat = () => {
   // default again. When the default is contracted, clearing an expanded
   // override re-collapses the row, so reserve the inset first (see the
   // `reserveBlankSpace` call in `toggleMessage` for why).
+  // Only the last message is anchored to the top via `blankSpace`. Collapsing
+  // any earlier message does not affect that anchor, so the reserve/release
+  // dance is only needed for the last message.
+  const isLastMessage = useCallback(
+    (id: string) =>
+      messages.length > 0 && messages[messages.length - 1].id === id,
+    [messages],
+  );
+
   const resetOverride = useCallback(
     (id: string) => {
       setOverrides((prev) => {
@@ -320,7 +344,15 @@ const AIChat = () => {
         // row, so reserve the inset before it shrinks.
         const wasExpanded = prev.get(id) ?? defaultExpanded;
 
+        // This collapse is driven by the 5s timer, not a tap, so the row may be
+        // scrolled off screen. Mark it to skip the collapse animation — there's
+        // no point animating a height the user can't see, and an off-screen
+        // animated shrink can still nudge the scroll position.
         if (wasExpanded && !defaultExpanded) {
+          skipCollapseAnimationIds.current.add(id);
+        }
+
+        if (wasExpanded && !defaultExpanded && isLastMessage(id)) {
           scrollRef.current?.reserveBlankSpace();
         }
 
@@ -331,7 +363,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded],
+    [defaultExpanded, isLastMessage],
   );
 
   const toggleMessage = useCallback(
@@ -340,11 +372,12 @@ const AIChat = () => {
         ? overrides.get(id)!
         : defaultExpanded;
 
-      // Collapsing shrinks the content below the anchor. Reserve a generous
-      // inset *before* the numberOfLines change commits so the ScrollView
-      // doesn't clamp the scroll offset (which would shift the anchor) before
-      // recalculateBlankSpace settles blankSpace to its new value.
-      if (isExpanded) {
+      // Collapsing the last message shrinks the content below the anchor.
+      // Reserve a generous inset *before* the shrink animation starts so the
+      // ScrollView doesn't clamp the scroll offset (which would shift the
+      // anchor) before recalculateBlankSpace settles blankSpace to its new
+      // value. Earlier messages aren't anchored, so they skip this.
+      if (isExpanded && isLastMessage(id)) {
         scrollRef.current?.reserveBlankSpace();
       }
 
@@ -362,7 +395,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded, overrides, resetOverride, schedule],
+    [defaultExpanded, isLastMessage, overrides, resetOverride, schedule],
   );
 
   const toggleDefaultMode = useCallback(() => {
@@ -547,11 +580,26 @@ const AIChat = () => {
                 <AIResponse
                   expanded={overrides.get(item.id) ?? defaultExpanded}
                   isPlaceholder={!!item.isPlaceholder}
+                  shouldAnimateCollapse={() => {
+                    // One-shot: the timer-driven (off-screen) collapse marks the
+                    // id to skip animation; consume the flag here.
+                    if (skipCollapseAnimationIds.current.has(item.id)) {
+                      skipCollapseAnimationIds.current.delete(item.id);
+
+                      return false;
+                    }
+
+                    return true;
+                  }}
                   text={item.text}
                   timeStamp={item.timeStamp}
-                  onCollapseAnimationEnd={() =>
-                    scrollRef.current?.releaseBlankSpace()
-                  }
+                  onCollapseAnimationEnd={() => {
+                    // Only the last message reserves blankSpace, so only it
+                    // needs to release. Earlier messages are a no-op.
+                    if (isLastMessage(item.id)) {
+                      scrollRef.current?.releaseBlankSpace();
+                    }
+                  }}
                   onToggle={() => toggleMessage(item.id)}
                 />
               )}
