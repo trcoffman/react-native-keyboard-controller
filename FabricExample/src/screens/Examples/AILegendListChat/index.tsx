@@ -1,26 +1,34 @@
 import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Button, Platform, Pressable, Text, TextInput, View } from "react-native";
-import {
   KeyboardAwareLegendList,
   useKeyboardChatComposerInset,
 } from "@legendapp/list/keyboard";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import {
   KeyboardController,
   KeyboardGestureArea,
   KeyboardStickyView,
 } from "react-native-keyboard-controller";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import styles from "./styles";
 
 import type { LegendListRef } from "@legendapp/list/react-native";
+import type { KeyboardChatScrollViewHandle } from "react-native-keyboard-controller";
 
 type Message = {
   id: string;
@@ -51,19 +59,91 @@ const INITIAL_MESSAGES: Message[] = [
   },
 ];
 
+const COLLAPSED_LINE_COUNT = 6;
+const LINE_HEIGHT = 22;
+const COLLAPSED_HEIGHT = COLLAPSED_LINE_COUNT * LINE_HEIGHT;
+const ANIMATION_DURATION = 250;
+
 const AIResponse = ({
   text,
   isPlaceholder,
   timeStamp,
   expanded,
+  animationsEnabled,
   onToggle,
+  onCollapseAnimationEnd,
 }: {
   text: string;
   isPlaceholder: boolean;
   timeStamp: number;
   expanded: boolean;
+  animationsEnabled: boolean;
   onToggle: () => void;
+  onCollapseAnimationEnd: () => void;
 }) => {
+  const fullHeight = useSharedValue<number | null>(null);
+  const animatedHeight = useSharedValue<number>(COLLAPSED_HEIGHT);
+  const isFirstLayout = useRef(true);
+
+  // Keep the latest callback / flag in refs so the height-animation effect below
+  // does NOT depend on them. The parent passes a fresh inline arrow every render
+  // (and re-renders on every streaming word), so depending on them directly
+  // would re-run the effect — and re-fire the timing animation — on each word.
+  const onCollapseAnimationEndRef = useRef(onCollapseAnimationEnd);
+  const animationsEnabledRef = useRef(animationsEnabled);
+
+  onCollapseAnimationEndRef.current = onCollapseAnimationEnd;
+  animationsEnabledRef.current = animationsEnabled;
+
+  const animatedStyle = useAnimatedStyle(() => {
+    if (animatedHeight.value === 0) {
+      return {};
+    }
+
+    return { height: animatedHeight.value, overflow: "hidden" };
+  });
+
+  useEffect(() => {
+    if (fullHeight.value === null) {
+      return;
+    }
+
+    const target = expanded ? fullHeight.value : COLLAPSED_HEIGHT;
+
+    if (isFirstLayout.current) {
+      // eslint-disable-next-line react-compiler/react-compiler
+      animatedHeight.value = target;
+      isFirstLayout.current = false;
+    } else if (expanded) {
+      animatedHeight.value = animationsEnabledRef.current
+        ? withTiming(target, { duration: ANIMATION_DURATION })
+        : target;
+    } else if (!animationsEnabledRef.current) {
+      // Animations off: snap instantly. Defer the completion callback to the
+      // next frame so the snapped (collapsed) height has committed and the list
+      // has settled its layout before the reserved blankSpace is released —
+      // releasing in the same frame drops the inset mid-collapse and shifts.
+      animatedHeight.value = target;
+      requestAnimationFrame(() => {
+        onCollapseAnimationEndRef.current();
+      });
+    } else {
+      // Collapsing: the content shrinks over ANIMATION_DURATION. The parent has
+      // reserved blankSpace to keep the anchor pinned across the whole shrink;
+      // release it only once the animation finishes (not when blankSpace first
+      // changes mid-animation), so the reserved inset spans every frame.
+      animatedHeight.value = withTiming(
+        target,
+        { duration: ANIMATION_DURATION },
+        (finished) => {
+          if (finished) {
+            runOnJS(onCollapseAnimationEndRef.current)();
+          }
+        },
+      );
+    }
+  }, [expanded, fullHeight, animatedHeight]);
+
   if (isPlaceholder) {
     return (
       <View
@@ -94,9 +174,40 @@ const AIResponse = ({
       ]}
       onPress={onToggle}
     >
-      <Text numberOfLines={expanded ? undefined : 6} style={styles.messageText}>
-        {text}
-      </Text>
+      {/* Invisible full-text view used only to measure the unconstrained height */}
+      <View
+        pointerEvents="none"
+        style={styles.measureLayer}
+        onLayout={(e) => {
+          const measured = e.nativeEvent.layout.height;
+
+          if (measured === fullHeight.value) {
+            return;
+          }
+
+          fullHeight.value = measured;
+
+          // While expanded (e.g. streaming in word-by-word) the height must only
+          // ever GROW — a transient smaller measurement must never shrink the
+          // view, or the content below shifts up. Clamp the expanded target to
+          // at least the current height. Only an explicit collapse
+          // (`!expanded`, handled in the effect below) may shrink it.
+          const target = expanded
+            ? Math.max(measured, animatedHeight.value)
+            : Math.min(measured, COLLAPSED_HEIGHT);
+
+          animatedHeight.value =
+            isFirstLayout.current || !animationsEnabledRef.current
+              ? target
+              : withTiming(target, { duration: ANIMATION_DURATION });
+          isFirstLayout.current = false;
+        }}
+      >
+        <Text style={styles.messageText}>{text}</Text>
+      </View>
+      <Animated.View style={animatedStyle}>
+        <Text style={styles.messageText}>{text}</Text>
+      </Animated.View>
       <View style={[styles.timeStamp, styles.systemStyle]}>
         <Text style={styles.timeStampText}>
           {new Date(timeStamp).toLocaleTimeString()}
@@ -145,11 +256,16 @@ const AIChat = () => {
   const [inputText, setInputText] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [liftBehavior, setLiftBehavior] = useState<LiftBehavior>("whenAtEnd");
+  // Whether expand/collapse height changes animate. When off, they snap.
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
   // Index of the message that should be anchored to the top of the viewport
   // after a user send. KeyboardAwareLegendList renders trailing blank space
   // below this item so it can sit at the top when content underflows.
   const [anchorIndex, setAnchorIndex] = useState<number | undefined>(undefined);
   const listRef = useRef<LegendListRef>(null);
+  // KeyboardAwareLegendList renders a KeyboardChatScrollView internally; this
+  // ref reaches it so we can reserve/release blankSpace around a collapse.
+  const scrollRef = useRef<KeyboardChatScrollViewHandle>(null);
   const inputRef = useRef<TextInput>(null);
   const composerRef = useRef<View>(null);
   const activeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -175,25 +291,51 @@ const AIChat = () => {
   }, []);
 
   // Clear a message's expand/collapse override so it follows the current
-  // default again.
-  const resetOverride = useCallback((id: string) => {
-    setOverrides((prev) => {
-      if (!prev.has(id)) {
-        return prev;
-      }
+  // default again. When the default is contracted, clearing an expanded
+  // override re-collapses the row, so reserve the inset first (see the
+  // `reserveBlankSpace` call in `toggleMessage` for why).
+  const resetOverride = useCallback(
+    (id: string) => {
+      setOverrides((prev) => {
+        if (!prev.has(id)) {
+          return prev;
+        }
 
-      const next = new Map(prev);
+        // Read the live state from `prev` (not a captured closure — this runs
+        // from a 5s timer where captured `overrides` would be stale): clearing
+        // an expanded override while the default is contracted re-collapses the
+        // row, so reserve the inset before it shrinks.
+        const wasExpanded = prev.get(id) ?? defaultExpanded;
 
-      next.delete(id);
+        if (wasExpanded && !defaultExpanded) {
+          scrollRef.current?.reserveBlankSpace();
+        }
 
-      return next;
-    });
-  }, []);
+        const next = new Map(prev);
+
+        next.delete(id);
+
+        return next;
+      });
+    },
+    [defaultExpanded],
+  );
 
   const toggleMessage = useCallback(
     (id: string) => {
+      const isExpanded = overrides.has(id)
+        ? overrides.get(id)!
+        : defaultExpanded;
+
+      // Collapsing shrinks the content below the tapped message. Reserve a
+      // generous inset *before* the shrink animation starts so the ScrollView
+      // doesn't clamp the scroll offset (which would shift content) before the
+      // list settles its layout.
+      if (isExpanded) {
+        scrollRef.current?.reserveBlankSpace();
+      }
+
       setOverrides((prev) => {
-        const isExpanded = prev.has(id) ? prev.get(id)! : defaultExpanded;
         const next = new Map(prev);
 
         next.set(id, !isExpanded);
@@ -207,7 +349,7 @@ const AIChat = () => {
         return next;
       });
     },
-    [defaultExpanded, resetOverride, schedule],
+    [defaultExpanded, overrides, resetOverride, schedule],
   );
 
   const toggleDefaultMode = useCallback(() => {
@@ -222,8 +364,8 @@ const AIChat = () => {
   // message data), so feed them through `extraData` to force affected rows to
   // re-render with the new expanded state.
   const expandState = useMemo(
-    () => ({ defaultExpanded, overrides }),
-    [defaultExpanded, overrides],
+    () => ({ animationsEnabled, defaultExpanded, overrides }),
+    [animationsEnabled, defaultExpanded, overrides],
   );
 
   const doSendMessage = (text: string, rawInput: string) => {
@@ -326,6 +468,15 @@ const AIChat = () => {
         >
           {defaultExpanded ? "Default: expanded" : "Default: contracted (5s)"}
         </Text>
+        <Text
+          style={[
+            styles.behaviorButton,
+            animationsEnabled && styles.behaviorButtonActive,
+          ]}
+          onPress={() => setAnimationsEnabled((prev) => !prev)}
+        >
+          {animationsEnabled ? "Animations: on" : "Animations: off"}
+        </Text>
       </View>
       <KeyboardGestureArea
         interpolator="ios"
@@ -334,11 +485,16 @@ const AIChat = () => {
       >
         <KeyboardAwareLegendList
           ref={listRef}
+          applyWorkaroundForContentInsetHitTestBug
           initialScrollAtEnd
           maintainVisibleContentPosition
           anchoredEndSpace={
             anchorIndex === undefined ? undefined : { anchorIndex }
           }
+          // KeyboardAwareLegendList renders a KeyboardChatScrollView internally,
+          // so this ref resolves to a KeyboardChatScrollViewHandle (with
+          // reserve/releaseBlankSpace). The prop is typed for a plain ScrollView,
+          // hence the cast.
           contentContainerStyle={styles.contentContainer}
           contentInsetEndAdjustment={contentInsetEndAdjustment}
           data={messages}
@@ -347,6 +503,7 @@ const AIChat = () => {
           keyboardOffset={insets.bottom}
           keyExtractor={(_item, index) => `item-${index}`}
           maintainScrollAtEnd={Platform.OS === "web"}
+          refScrollView={scrollRef as React.Ref<never>}
           renderItem={({ item }) => (
             <View>
               {item.sender === "user" ? (
@@ -369,10 +526,17 @@ const AIChat = () => {
                 </Animated.View>
               ) : (
                 <AIResponse
+                  animationsEnabled={animationsEnabled}
                   expanded={overrides.get(item.id) ?? defaultExpanded}
                   isPlaceholder={!!item.isPlaceholder}
                   text={item.text}
                   timeStamp={item.timeStamp}
+                  onCollapseAnimationEnd={() => {
+                    // Release the reserve once the collapse animation finishes.
+                    requestAnimationFrame(() => {
+                      scrollRef.current?.releaseBlankSpace();
+                    });
+                  }}
                   onToggle={() => toggleMessage(item.id)}
                 />
               )}
